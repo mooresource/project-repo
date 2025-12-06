@@ -1,0 +1,329 @@
+local FLAG_CONTAINER_NAME = "Flag"
+local PARTS_FOLDER_NAME = "Parts"
+local VISUALIZER_NAME = "PredictorVis"
+
+local SAFE_COLOR = Color3.fromRGB(0, 255, 100)
+local BOMB_COLOR = Color3.fromRGB(255, 0, 50)
+local GRID_SIZE = 5
+
+_G.StopMinesweeper = false
+
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local task = task
+
+local function markTile(node, type)
+    if node.VisualType == type then return end
+    
+    local part = node.Part
+    local existing = part:FindFirstChild(VISUALIZER_NAME)
+
+    if existing then
+        local frame = existing:FindFirstChild("Frame")
+        if frame then
+            if frame.BackgroundColor3 == BOMB_COLOR then return end
+            if type == "BOMB" then
+                frame.BackgroundColor3 = BOMB_COLOR
+                local t = frame:FindFirstChild("TextLabel")
+                if t then t.Text = "💣" end
+                node.VisualType = "BOMB"
+            end
+        end
+    else
+        local gui = Instance.new("SurfaceGui")
+        gui.Name = VISUALIZER_NAME
+        gui.Face = Enum.NormalId.Top
+        gui.AlwaysOnTop = true
+        gui.Parent = part
+
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(1, 0, 1, 0)
+        frame.BackgroundColor3 = (type == "BOMB") and BOMB_COLOR or SAFE_COLOR
+        frame.BackgroundTransparency = 0.4
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+        
+        local text = Instance.new("TextLabel")
+        text.Size = UDim2.new(1,0,1,0)
+        text.BackgroundTransparency = 1
+        text.Text = (type == "BOMB") and "💣" or "✓"
+        text.TextColor3 = Color3.new(1,1,1)
+        text.TextScaled = true
+        text.TextStrokeTransparency = 0
+        text.Parent = frame
+        
+        node.VisualType = type
+    end
+end
+
+local function clearVisual(node)
+    local v = node.Part:FindFirstChild(VISUALIZER_NAME)
+    if v then v:Destroy() end
+    node.VisualType = nil
+end
+
+local function getPartNumber(part)
+    local gui = part:FindFirstChild("NumberGui")
+    if gui then
+        local label = gui:FindFirstChildWhichIsA("TextLabel", true)
+        if label and label.Text ~= "" then
+            local clean = string.match(label.Text, "%d+")
+            return tonumber(clean)
+        end
+    end
+    return nil
+end
+
+local Grid = {}
+local ActiveNodes = {}
+local AllNodes = {}
+
+local function getKey(pos)
+    return math.floor(pos.X / GRID_SIZE + 0.5) .. ":" .. math.floor(pos.Z / GRID_SIZE + 0.5)
+end
+
+local function buildGrid(folder)
+    Grid = {}
+    ActiveNodes = {}
+    AllNodes = {}
+    
+    local parts = folder:GetChildren()
+    for _, part in ipairs(parts) do
+        if part:IsA("BasePart") then
+            local key = getKey(part.Position)
+            local node = {
+                Part = part,
+                Key = key,
+                Number = nil,
+                State = "UNKNOWN",
+                Solved = false,
+                Neighbors = {},
+                VisualType = nil,
+                CacheUnknowns = nil,
+                CacheNeeds = nil,
+            }
+            Grid[key] = node
+            table.insert(AllNodes, node)
+        end
+    end
+
+    for _, node in ipairs(AllNodes) do
+        local pos = node.Part.Position
+        local cx, cz = math.floor(pos.X / GRID_SIZE + 0.5), math.floor(pos.Z / GRID_SIZE + 0.5)
+        for x = -1, 1 do
+            for z = -1, 1 do
+                if not (x == 0 and z == 0) then
+                    local nKey = (cx + x) .. ":" .. (cz + z)
+                    local neighbor = Grid[nKey]
+                    if neighbor then
+                        table.insert(node.Neighbors, neighbor)
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function updateNodeCounts(node)
+    local unknownList = {}
+    local bombCount = 0
+    local unknownSet = {}
+
+    for _, n in ipairs(node.Neighbors) do
+        if n.State == "BOMB" then
+            bombCount = bombCount + 1
+        elseif n.State == "UNKNOWN" then
+            if n.Number then
+                n.State = "SAFE"
+            else
+                table.insert(unknownList, n)
+                unknownSet[n] = true
+            end
+        end
+    end
+    return bombCount, unknownList, unknownSet
+end
+
+local function isSubset(setA, setB)
+    for node in pairs(setA) do
+        if not setB[node] then
+            return false
+        end
+    end
+    return true
+end
+
+local function solveLoop()
+    for _, node in ipairs(AllNodes) do
+        local part = node.Part
+        local num = getPartNumber(part)
+
+        if part:FindFirstChild(VISUALIZER_NAME) and part:FindFirstChild("NumberGui") then
+            clearVisual(node)
+        end
+        
+        if not node.Number and num then
+            node.Number = num
+            node.State = "SAFE"
+            
+            clearVisual(node)
+            
+            local active = false
+            for _, a in ipairs(ActiveNodes) do if a == node then active = true; break end end
+            if not active then table.insert(ActiveNodes, node) end
+        end
+    end
+
+    local safetyBreak = 0
+    local somethingChanged = true
+    
+    while somethingChanged and safetyBreak < 20 do
+        somethingChanged = false
+        safetyBreak = safetyBreak + 1
+        
+        for i = #ActiveNodes, 1, -1 do
+            local node = ActiveNodes[i]
+            
+            local currentBombs, unknownNeighborsList, unknownNeighborsSet = updateNodeCounts(node)
+
+            if node.Solved then
+                table.remove(ActiveNodes, i)
+                continue
+            end
+            
+            local remainingNeeds = node.Number - currentBombs
+            local unknownCount = #unknownNeighborsList
+            
+            local madeLocalChange = false
+
+            if remainingNeeds == 0 and unknownCount > 0 then
+                for _, n in ipairs(unknownNeighborsList) do
+                    if n.State == "UNKNOWN" then
+                        n.State = "SAFE"
+                        markTile(n, "SAFE")
+                        madeLocalChange = true
+                    end
+                end
+                node.Solved = true
+            elseif remainingNeeds == unknownCount and unknownCount > 0 then
+                for _, n in ipairs(unknownNeighborsList) do
+                    if n.State == "UNKNOWN" then
+                        n.State = "BOMB"
+                        markTile(n, "BOMB")
+                        madeLocalChange = true
+                    end
+                end
+                node.Solved = true
+            elseif unknownCount == 0 then
+                node.Solved = true
+            end
+            
+            if node.Solved then
+                table.remove(ActiveNodes, i)
+            end
+
+            if madeLocalChange then
+                somethingChanged = true
+                node.CacheUnknowns = nil
+                node.CacheNeeds = nil
+            else
+                node.CacheUnknowns = unknownNeighborsSet
+                node.CacheNeeds = remainingNeeds
+            end
+        end
+
+        if not somethingChanged then
+            for i, nodeA in ipairs(ActiveNodes) do
+                if nodeA.Solved or not nodeA.CacheUnknowns then continue end
+                
+                for j, nodeB in ipairs(ActiveNodes) do
+                    if i == j or nodeB.Solved or not nodeB.CacheUnknowns then continue end
+                    
+                    if (nodeA.Part.Position - nodeB.Part.Position).Magnitude > (GRID_SIZE * 2.5) then continue end
+                    
+                    local setA = nodeA.CacheUnknowns
+                    local setB = nodeB.CacheUnknowns
+                    
+                    local smallerSet, largerSet, smallerNeeds, largerNeeds
+                    
+                    if next(setA) and next(setB) and #setA <= #setB and isSubset(setA, setB) then
+                        smallerSet = setA
+                        largerSet = setB
+                        smallerNeeds = nodeA.CacheNeeds
+                        largerNeeds = nodeB.CacheNeeds
+                    elseif next(setA) and next(setB) and #setB < #setA and isSubset(setB, setA) then
+                        smallerSet = setB
+                        largerSet = setA
+                        smallerNeeds = nodeB.CacheNeeds
+                        largerNeeds = nodeA.CacheNeeds
+                    end
+
+                    if smallerSet and largerSet ~= smallerSet then
+                        local diffNeeds = largerNeeds - smallerNeeds
+                        local diffNodes = {}
+                        local diffCount = 0
+                        
+                        for uB in pairs(largerSet) do
+                            if not smallerSet[uB] then
+                                table.insert(diffNodes, uB)
+                                diffCount = diffCount + 1
+                            end
+                        end
+                        
+                        if diffCount > 0 then
+                            if diffNeeds == 0 then
+                                for _, n in ipairs(diffNodes) do
+                                    if n.State == "UNKNOWN" then
+                                        n.State = "SAFE"
+                                        markTile(n, "SAFE")
+                                        somethingChanged = true
+                                    end
+                                end
+                            elseif diffNeeds == diffCount then
+                                for _, n in ipairs(diffNodes) do
+                                    if n.State == "UNKNOWN" then
+                                        n.State = "BOMB"
+                                        markTile(n, "BOMB")
+                                        somethingChanged = true
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function Start()
+    print("--- ULTIMATE SOLVER v5.0 (BLAZING FAST) STARTED ---")
+    
+    local FlagContainer = Workspace:FindFirstChild(FLAG_CONTAINER_NAME)
+    local PartsFolder = FlagContainer and FlagContainer:FindFirstChild(PARTS_FOLDER_NAME)
+
+    if not PartsFolder then warn("Parts folder not found") return end
+
+    buildGrid(PartsFolder)
+
+    local prevCount = 0
+    RunService.Heartbeat:Connect(function()
+        if _G.StopMinesweeper then return end
+
+        local currentChildren = #PartsFolder:GetChildren()
+        
+        if currentChildren ~= prevCount then
+            prevCount = currentChildren
+            if currentChildren > 0 then
+                task.wait(0.1)
+                buildGrid(PartsFolder)
+            end
+        end
+        
+        if currentChildren > 0 then
+            solveLoop()
+        end
+    end)
+end
+
+task.spawn(Start)
