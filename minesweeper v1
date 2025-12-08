@@ -1,11 +1,9 @@
---// Minesweeper v1
-
 local FLAG_CONTAINER_NAME = "Flag"
 local PARTS_FOLDER_NAME = "Parts"
 local VISUALIZER_NAME = "PredictorVis"
 
-local SAFE_COLOR = Color3.fromRGB(0, 255, 100)
-local BOMB_COLOR = Color3.fromRGB(255, 0, 50)
+local SAFE_COLOR = Color3.fromRGB(46, 204, 113)
+local BOMB_COLOR = Color3.fromRGB(231, 76, 60)
 local GRID_SIZE = 5
 
 _G.StopMinesweeper = false
@@ -14,59 +12,145 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local task = task
 
-local SOLVE_INTERVAL = 0.01           -- 0.01s per tick
-local SCAN_PER_TICK = 40              
-local PROCESS_NODES_PER_PASS = 200    -- Increased slightly due to optimizations
-local TANK_RUN_FREQUENCY = 1          
-local TANK_PAIR_LIMIT = 80            -- Increased limit due to faster checks
-local MAX_CYCLES = 30                 
+local SOLVE_INTERVAL = 0.015
+local SCAN_PER_TICK = 30
+local PROCESS_BATCH_SIZE = 150
+local MAX_SUBSET_CHECKS = 60
+local CSP_CELL_LIMIT = 14
+local VISUAL_UPDATE_BATCH = 15
 
-local function markTile(node, type)
-    if node.VisualType == type then return end
-    local part = node.Part
-    if not part then return end
+local Stats = {
+    BasicSolves = 0,
+    SubsetSolves = 0,
+    CSPSolves = 0,
+    TotalProcessed = 0
+}
 
-    local existing = part:FindFirstChild(VISUALIZER_NAME)
-    if existing then
-        local frame = existing:FindFirstChild("Frame")
-        if frame then
-            if frame.BackgroundColor3 == BOMB_COLOR and type == "SAFE" then return end
-            frame.BackgroundColor3 = (type == "BOMB") and BOMB_COLOR or SAFE_COLOR
-            local t = frame:FindFirstChild("TextLabel")
-            if t then t.Text = (type == "BOMB") and "🔴" or "🟢" end
-            node.VisualType = type
-        end
+local Grid = {}
+local AllNodes = {}
+local ActiveQueue = {}
+local InQueue = {}
+local DirtyVisuals = {}
+
+local VisualPool = {SAFE = {}, BOMB = {}}
+local MAX_POOL_SIZE = 20
+
+local function getKey(cx, cz)
+    return cx * 10000 + cz
+end
+
+local function fastRemove(t, index)
+    local count = #t
+    if index ~= count then t[index] = t[count] end
+    t[count] = nil
+end
+
+local function addToQueue(node)
+    if node and node.Number and not node.Solved and not InQueue[node] then
+        InQueue[node] = true
+        ActiveQueue[#ActiveQueue + 1] = node
+    end
+end
+
+local function queueVisualUpdate(node, vType)
+    DirtyVisuals[node] = {type = vType}
+end
+
+local function hasNumberGui(part)
+    if not part then return false end
+    return part:FindFirstChild("NumberGui") ~= nil or part:FindFirstChild("SurfaceGui") ~= nil
+end
+
+local function createVisualGUI(vType)
+    local pool = VisualPool[vType]
+    local gui, frame, text
+
+    if #pool > 0 then
+        gui = table.remove(pool)
+        frame = gui.Frame
+        text = frame.TextLabel
     else
-        local gui = Instance.new("SurfaceGui")
+        gui = Instance.new("SurfaceGui")
         gui.Name = VISUALIZER_NAME
         gui.Face = Enum.NormalId.Top
         gui.AlwaysOnTop = true
-        gui.Parent = part
+        gui.LightInfluence = 0
+        gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+        gui.PixelsPerStud = 20
 
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(1,0,1,0)
-        frame.BackgroundColor3 = (type == "BOMB") and BOMB_COLOR or SAFE_COLOR
-        frame.BackgroundTransparency = 0.4
+        frame = Instance.new("Frame")
+        frame.Name = "Frame"
+        frame.Size = UDim2.new(1, 0, 1, 0)
         frame.BorderSizePixel = 0
         frame.Parent = gui
 
-        local text = Instance.new("TextLabel")
-        text.Size = UDim2.new(1,0,1,0)
+        text = Instance.new("TextLabel")
+        text.Name = "TextLabel"
+        text.Size = UDim2.new(1, 0, 1, 0)
         text.BackgroundTransparency = 1
-        text.Text = (type == "BOMB") and "🔴" or "🟢"
-        text.TextColor3 = Color3.new(1,1,1)
-        text.TextScaled = true
-        text.TextStrokeTransparency = 0
+        text.TextStrokeTransparency = 0.5
+        text.Font = Enum.Font.GothamBold
         text.Parent = frame
-
-        node.VisualType = type
     end
+
+    if vType == "BOMB" then
+        frame.BackgroundColor3 = BOMB_COLOR
+        frame.BackgroundTransparency = 0.2
+        text.Text = "💣"
+        text.TextColor3 = Color3.new(1, 1, 1)
+        text.TextScaled = true
+    else
+        frame.BackgroundColor3 = SAFE_COLOR
+        frame.BackgroundTransparency = 0.2
+        text.Text = "✓"
+        text.TextColor3 = Color3.new(1, 1, 1)
+        text.TextScaled = true
+    end
+
+    return gui
+end
+
+local function flushVisualUpdates()
+    local count = 0
+    for node, data in pairs(DirtyVisuals) do
+        if not node.Part then continue end
+
+        local existing = node.Part:FindFirstChild(VISUALIZER_NAME)
+        if existing then
+            local oldType = node.VisualType
+            if oldType and VisualPool[oldType] and #VisualPool[oldType] < MAX_POOL_SIZE then
+                existing.Parent = nil
+                table.insert(VisualPool[oldType], existing)
+            else
+                existing:Destroy()
+            end
+        end
+
+        local gui = createVisualGUI(data.type)
+        gui.Parent = node.Part
+        node.VisualType = data.type
+
+        count = count + 1
+        if count >= VISUAL_UPDATE_BATCH then
+            task.wait()
+            count = 0
+        end
+    end
+    DirtyVisuals = {}
 end
 
 local function clearVisual(node)
     if not node or not node.Part then return end
     local v = node.Part:FindFirstChild(VISUALIZER_NAME)
-    if v then v:Destroy() end
+    if v then
+        local vType = node.VisualType
+        if vType and VisualPool[vType] and #VisualPool[vType] < MAX_POOL_SIZE then
+            v.Parent = nil
+            table.insert(VisualPool[vType], v)
+        else
+            v:Destroy()
+        end
+    end
     node.VisualType = nil
 end
 
@@ -84,316 +168,364 @@ local function getPartNumber(part)
     return nil
 end
 
--- // GRID SYSTEM //
-
-local Grid = {}
-local AllNodes = {}
-local ActiveQueue = {}
-local InQueue = {}
-
--- Helper to quickly remove from array O(1) by swapping with last element
-local function fastRemove(t, index)
-    local count = #t
-    if index ~= count then
-        t[index] = t[count]
-    end
-    t[count] = nil
-end
-
-local function getKey(cx, cz)
-    return cx .. ":" .. cz
-end
-
-local function addToQueue(node)
-    if node and node.Number and not node.Solved and not InQueue[node] then
-        InQueue[node] = true
-        ActiveQueue[#ActiveQueue + 1] = node
-    end
-end
-
 local function buildGrid(folder)
+    for _, pool in pairs(VisualPool) do
+        for i = 1, #pool do
+            pool[i]:Destroy()
+        end
+        table.clear(pool)
+    end
+
     Grid = {}
     AllNodes = {}
     ActiveQueue = {}
     InQueue = {}
+    DirtyVisuals = {}
 
     local parts = folder:GetChildren()
     for i = 1, #parts do
         local part = parts[i]
         if part and part:IsA("BasePart") then
             local pos = part.Position
-            -- Cache integer coordinates to avoid Vector3 math later
-            local cx = math.floor(pos.X / GRID_SIZE + 0.5)
-            local cz = math.floor(pos.Z / GRID_SIZE + 0.5)
-            local key = getKey(cx, cz)
-            
+            local cx = math.floor(pos.X / GRID_SIZE)
+            local cz = math.floor(pos.Z / GRID_SIZE)
             local node = {
                 Part = part,
-                Key = key,
-                Cx = cx, 
+                Cx = cx,
                 Cz = cz,
                 Number = nil,
                 State = "UNKNOWN",
                 Solved = false,
                 Neighbors = {},
-                VisualType = nil,
-                CacheUnknowns = nil,
-                CacheNeeds = nil
+                NeighborCount = 0,
+                VisualType = nil
             }
-            Grid[key] = node
+            Grid[getKey(cx, cz)] = node
             AllNodes[#AllNodes + 1] = node
         end
     end
 
-    -- Link neighbors (8-neighborhood)
     for i = 1, #AllNodes do
         local node = AllNodes[i]
         local cx, cz = node.Cx, node.Cz
+        local neighbors = {}
         for x = -1, 1 do
             for z = -1, 1 do
                 if not (x == 0 and z == 0) then
-                    local nKey = getKey(cx + x, cz + z)
-                    local neighbor = Grid[nKey]
+                    local neighbor = Grid[getKey(cx + x, cz + z)]
                     if neighbor then
-                        node.Neighbors[#node.Neighbors + 1] = neighbor
+                        neighbors[#neighbors + 1] = neighbor
                     end
                 end
             end
         end
+        node.Neighbors = neighbors
+        node.NeighborCount = #neighbors
     end
 end
 
--- // LOGIC HELPERS //
-
 local function updateNodeCounts(node)
-    local unknownList = {}
-    local bombCount = 0
-    local unknownSet = {}
-
-    local neigh = node.Neighbors
-    for i = 1, #neigh do
-        local n = neigh[i]
+    local unknowns, bombCount = {}, 0
+    local neighbors = node.Neighbors
+    for i = 1, node.NeighborCount do
+        local n = neighbors[i]
         local st = n.State
         if st == "BOMB" then
             bombCount = bombCount + 1
         elseif st == "UNKNOWN" then
-            if n.Number then
-                n.State = "SAFE"
+            if not n.Number then
+                unknowns[#unknowns + 1] = n
             else
-                unknownList[#unknownList + 1] = n
-                unknownSet[n] = true
+                n.State = "SAFE"
             end
         end
     end
-
-    return bombCount, unknownList, unknownSet
+    return bombCount, unknowns
 end
 
-local function isSubset(setA, setB)
-    for node in pairs(setA) do
-        if not setB[node] then return false end
+local function advancedSubsets()
+    local qSize = #ActiveQueue
+    if qSize < 2 then return false end
+    local limit = math.min(qSize, MAX_SUBSET_CHECKS)
+    local nodeData = {}
+    for i = 1, limit do
+        local node = ActiveQueue[i]
+        if node then
+            local bombs, unks = updateNodeCounts(node)
+            local needs = node.Number - bombs
+            if #unks > 0 and needs > 0 then
+                local unkSet = {}
+                for j = 1, #unks do unkSet[unks[j]] = true end
+                nodeData[i] = {node = node, unks = unks, unkSet = unkSet, needs = needs, size = #unks}
+            end
+        end
     end
-    return true
-end
-
--- // MAIN SOLVER //
-
-local scanIndex = 1
-local passCounter = 0
-
-local function solveLoop()
-    passCounter = passCounter + 1
-
-    -- 1) Incremental scanning for new numbers
-    if #AllNodes > 0 then
-        for i = 1, SCAN_PER_TICK do
-            if #AllNodes == 0 then break end
-            if scanIndex > #AllNodes then scanIndex = 1 end
-
-            local node = AllNodes[scanIndex]
-            if node and not node.Number then
-                local num = getPartNumber(node.Part)
-                if num then
-                    node.Number = num
-                    node.State = "SAFE"
-                    clearVisual(node)
-                    addToQueue(node)
-                    local neigh = node.Neighbors
-                    for j = 1, #neigh do addToQueue(neigh[j]) end
+    for i = 1, limit do
+        local dataA = nodeData[i]
+        if not dataA then continue end
+        for j = i + 1, limit do
+            local dataB = nodeData[j]
+            if not dataB then continue end
+            local nodeA, nodeB = dataA.node, dataB.node
+            if math.abs(nodeA.Cx - nodeB.Cx) > 2 or math.abs(nodeA.Cz - nodeB.Cz) > 2 then
+                continue
+            end
+            local isAsubB, isBsubA = true, true
+            for k = 1, dataA.size do
+                if not dataB.unkSet[dataA.unks[k]] then isAsubB = false end
+            end
+            for k = 1, dataB.size do
+                if not dataA.unkSet[dataB.unks[k]] then isBsubA = false end
+            end
+            if not isAsubB and not isBsubA then continue end
+            local smaller, larger, needSmall, needLarge
+            if isAsubB and dataA.size < dataB.size then
+                smaller, larger = dataA, dataB
+                needSmall, needLarge = dataA.needs, dataB.needs
+            elseif isBsubA and dataB.size < dataA.size then
+                smaller, larger = dataB, dataA
+                needSmall, needLarge = dataB.needs, dataA.needs
+            else
+                continue
+            end
+            local diffNeed = needLarge - needSmall
+            local diffNodes = {}
+            for k = 1, larger.size do
+                local u = larger.unks[k]
+                if not smaller.unkSet[u] then
+                    diffNodes[#diffNodes + 1] = u
                 end
             end
-
-            scanIndex = scanIndex + 1
+            if #diffNodes > 0 then
+                if diffNeed == 0 then
+                    for k = 1, #diffNodes do
+                        local n = diffNodes[k]
+                        if n.State == "UNKNOWN" then
+                            n.State = "SAFE"
+                            queueVisualUpdate(n, "SAFE")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                        end
+                    end
+                    Stats.SubsetSolves = Stats.SubsetSolves + #diffNodes
+                    return true
+                elseif diffNeed == #diffNodes then
+                    for k = 1, #diffNodes do
+                        local n = diffNodes[k]
+                        if n.State == "UNKNOWN" then
+                            n.State = "BOMB"
+                            queueVisualUpdate(n, "BOMB")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                        end
+                    end
+                    Stats.SubsetSolves = Stats.SubsetSolves + #diffNodes
+                    return true
+                end
+            end
         end
     end
+    return false
+end
 
-    -- 2) Process queue in batch
+local CSPCache = {}
+local CSPCacheSize = 0
+local MAX_CACHE_SIZE = 50
+
+local function hashConfiguration(cells)
+    local parts = {}
+    for i = 1, #cells do
+        parts[#parts + 1] = cells[i].Cx
+        parts[#parts + 1] = cells[i].Cz
+    end
+    return table.concat(parts, ",")
+end
+
+local function solveCSP()
+    if #ActiveQueue < 3 or #ActiveQueue > 15 then return false end
+    local unknownSet = {}
+    local constraints = {}
+    for i = 1, math.min(5, #ActiveQueue) do
+        local node = ActiveQueue[i]
+        local bombs, unks = updateNodeCounts(node)
+        local needs = node.Number - bombs
+        if #unks > 0 and needs > 0 then
+            local unkSet = {}
+            for j = 1, #unks do
+                unkSet[unks[j]] = true
+                unknownSet[unks[j]] = true
+            end
+            constraints[#constraints + 1] = {unkSet = unkSet, needs = needs}
+        end
+    end
+    local cells = {}
+    for cell in pairs(unknownSet) do cells[#cells + 1] = cell end
+    if #cells == 0 or #cells > CSP_CELL_LIMIT or #constraints == 0 then return false end
+    local hash = hashConfiguration(cells)
+    if CSPCache[hash] then return false end
+
+    local n = #cells
+    local maxConfigs = math.min(2^n, 2048)
+    local alwaysBomb, alwaysSafe = {}, {}
+    for i = 1, n do alwaysBomb[i] = true; alwaysSafe[i] = true end
+    local validCount = 0
+
+    for mask = 0, maxConfigs - 1 do
+        local config, tempMask = {}, mask
+        for i = 1, n do
+            config[i] = tempMask % 2
+            tempMask = math.floor(tempMask / 2)
+        end
+        local valid = true
+        for j = 1, #constraints do
+            local c = constraints[j]
+            local bombCount = 0
+            for k = 1, n do
+                if c.unkSet[cells[k]] and config[k] == 1 then
+                    bombCount = bombCount + 1
+                end
+            end
+            if bombCount ~= c.needs then valid = false break end
+        end
+        if valid then
+            validCount = validCount + 1
+            for i = 1, n do
+                if config[i] == 0 then alwaysBomb[i] = false end
+                if config[i] == 1 then alwaysSafe[i] = false end
+            end
+        end
+    end
+    if validCount == 0 then return false end
+    CSPCache[hash] = true
+    CSPCacheSize = CSPCacheSize + 1
+    if CSPCacheSize > MAX_CACHE_SIZE then
+        CSPCache = {}
+        CSPCacheSize = 0
+    end
+    local changed = false
+    for i = 1, n do
+        local u = cells[i]
+        if u.State == "UNKNOWN" then
+            if alwaysBomb[i] then
+                u.State = "BOMB"
+                queueVisualUpdate(u, "BOMB")
+                for j = 1, u.NeighborCount do addToQueue(u.Neighbors[j]) end
+                changed = true
+            elseif alwaysSafe[i] then
+                u.State = "SAFE"
+                queueVisualUpdate(u, "SAFE")
+                for j = 1, u.NeighborCount do addToQueue(u.Neighbors[j]) end
+                changed = true
+            end
+        end
+    end
+    if changed then Stats.CSPSolves = Stats.CSPSolves + 1 end
+    return changed
+end
+
+local scanIndex = 1
+local stuckCounter = 0
+
+local function solveLoop()
+    for i = 1, SCAN_PER_TICK do
+        if scanIndex > #AllNodes then scanIndex = 1 end
+        local node = AllNodes[scanIndex]
+        if node then
+            if hasNumberGui(node.Part) then
+                clearVisual(node)
+            end
+
+            local num = getPartNumber(node.Part)
+            if num and not node.Number then
+                node.Number = num
+                node.State = "SAFE"
+                clearVisual(node)
+                addToQueue(node)
+                for j = 1, node.NeighborCount do addToQueue(node.Neighbors[j]) end
+            elseif node.Number and num then
+                clearVisual(node)
+            end
+        end
+        scanIndex = scanIndex + 1
+    end
+
     local processed = 0
-    local cycles = 0
-
-    while #ActiveQueue > 0 and cycles < MAX_CYCLES and processed < PROCESS_NODES_PER_PASS do
-        cycles = cycles + 1
-        local cycleChanged = false
-
+    local cycleChanged = false
+    while #ActiveQueue > 0 and processed < PROCESS_BATCH_SIZE do
         local idx = 1
-        while idx <= #ActiveQueue and processed < PROCESS_NODES_PER_PASS do
+        while idx <= #ActiveQueue and processed < PROCESS_BATCH_SIZE do
             local node = ActiveQueue[idx]
-            
-            -- If node was already solved (flagged elsewhere), remove it efficiently
             if node.Solved then
                 InQueue[node] = nil
                 fastRemove(ActiveQueue, idx)
-                -- Do NOT increment idx, as the slot now holds a new swapped node
             else
                 processed = processed + 1
-                local bombCount, unkList, unkSet = updateNodeCounts(node)
+                local bombCount, unkList = updateNodeCounts(node)
                 local unkCount = #unkList
-                local remainingNeeds = node.Number - bombCount
-                local madeChange = false
-
-                if remainingNeeds == unkCount and unkCount > 0 then
+                local needs = node.Number - bombCount
+                local changed = false
+                if needs == unkCount and unkCount > 0 then
                     for k = 1, unkCount do
                         local n = unkList[k]
                         if n.State == "UNKNOWN" then
                             n.State = "BOMB"
-                            markTile(n, "BOMB")
-                            local nb = n.Neighbors
-                            for t = 1, #nb do addToQueue(nb[t]) end
-                            madeChange = true
+                            queueVisualUpdate(n, "BOMB")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                            changed = true
                         end
                     end
                     node.Solved = true
-
-                elseif remainingNeeds == 0 and unkCount > 0 then
+                    Stats.BasicSolves = Stats.BasicSolves + unkCount
+                elseif needs == 0 and unkCount > 0 then
                     for k = 1, unkCount do
                         local n = unkList[k]
                         if n.State == "UNKNOWN" then
                             n.State = "SAFE"
-                            markTile(n, "SAFE")
-                            local nb = n.Neighbors
-                            for t = 1, #nb do addToQueue(nb[t]) end
-                            madeChange = true
+                            queueVisualUpdate(n, "SAFE")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                            changed = true
                         end
                     end
                     node.Solved = true
-
+                    Stats.BasicSolves = Stats.BasicSolves + unkCount
                 elseif unkCount == 0 then
                     node.Solved = true
                 end
-
-                if madeChange then
-                    cycleChanged = true
-                    node.CacheUnknowns = nil
-                    node.CacheNeeds = nil
-                else
-                    node.CacheUnknowns = unkSet
-                    node.CacheNeeds = remainingNeeds
-                end
-
+                if changed then cycleChanged = true end
                 if node.Solved then
                     InQueue[node] = nil
                     fastRemove(ActiveQueue, idx)
-                    -- Again, do not increment idx
                 else
                     idx = idx + 1
                 end
             end
         end
-
-        -- Tank/Subsets Optimized
-        if not cycleChanged and (passCounter % TANK_RUN_FREQUENCY == 0) then
-            local qSize = #ActiveQueue
-            local limit = math.min(qSize, TANK_PAIR_LIMIT)
-            local foundChange = false
-
-            for a = 1, limit do
-                local nodeA = ActiveQueue[a]
-                if nodeA and nodeA.CacheUnknowns then
-                    for b = 1, limit do
-                        if a ~= b then
-                            local nodeB = ActiveQueue[b]
-                            if nodeB and nodeB.CacheUnknowns then
-                                -- OPTIMIZED: Use cached integer coordinates logic
-                                -- Nodes must be within 2 tiles to share neighbors.
-                                -- Accessing .Cx/.Cz is much faster than .Part.Position.Magnitude
-                                if math.abs(nodeA.Cx - nodeB.Cx) <= 2 and math.abs(nodeA.Cz - nodeB.Cz) <= 2 then
-                                    
-                                    local setA = nodeA.CacheUnknowns
-                                    local setB = nodeB.CacheUnknowns
-                                    local smaller, larger, needSmall, needLarge = nil, nil, nil, nil
-
-                                    if isSubset(setA, setB) then
-                                        smaller, larger = setA, setB
-                                        needSmall, needLarge = nodeA.CacheNeeds, nodeB.CacheNeeds
-                                    elseif isSubset(setB, setA) then
-                                        smaller, larger = setB, setA
-                                        needSmall, needLarge = nodeB.CacheNeeds, nodeA.CacheNeeds
-                                    end
-
-                                    if smaller then
-                                        local diffNeed = needLarge - needSmall
-                                        local diffNodes = {}
-                                        local diffCnt = 0
-                                        for u in pairs(larger) do
-                                            if not smaller[u] then
-                                                diffCnt = diffCnt + 1
-                                                diffNodes[#diffNodes + 1] = u
-                                            end
-                                        end
-
-                                        if diffCnt > 0 then
-                                            if diffNeed == 0 then
-                                                for x = 1, #diffNodes do
-                                                    local n = diffNodes[x]
-                                                    if n.State == "UNKNOWN" then
-                                                        n.State = "SAFE"
-                                                        markTile(n, "SAFE")
-                                                        local nb = n.Neighbors
-                                                        for t = 1, #nb do addToQueue(nb[t]) end
-                                                        cycleChanged = true
-                                                    end
-                                                end
-                                            elseif diffNeed == diffCnt then
-                                                for x = 1, #diffNodes do
-                                                    local n = diffNodes[x]
-                                                    if n.State == "UNKNOWN" then
-                                                        n.State = "BOMB"
-                                                        markTile(n, "BOMB")
-                                                        local nb = n.Neighbors
-                                                        for t = 1, #nb do addToQueue(nb[t]) end
-                                                        cycleChanged = true
-                                                    end
-                                                end
-                                            end
-                                        end
-                                    end
-                                end
-                                if cycleChanged then foundChange = true break end
-                            end
-                        end
-                    end
-                end
-                if foundChange then break end
-            end
-        end
+        if not cycleChanged then break end
     end
+
+    if not cycleChanged and #ActiveQueue > 0 then
+        cycleChanged = advancedSubsets()
+    end
+    if not cycleChanged and #ActiveQueue > 0 then
+        cycleChanged = solveCSP()
+    end
+
+    if cycleChanged then
+        stuckCounter = 0
+    else
+        stuckCounter = stuckCounter + 1
+    end
+
+    if next(DirtyVisuals) then
+        flushVisualUpdates()
+    end
+    Stats.TotalProcessed = Stats.TotalProcessed + processed
 end
 
--- // INITIALIZATION //
-
 local function Start()
-    print("--- MAX BEAST SOLVER OPTIMIZED (FAST QUEUE) ---")
-
     local FlagContainer = Workspace:FindFirstChild(FLAG_CONTAINER_NAME)
     local PartsFolder = FlagContainer and FlagContainer:FindFirstChild(PARTS_FOLDER_NAME)
-    if not PartsFolder then
-        warn("Parts folder not found. Check names.")
-        return
-    end
+    if not PartsFolder then return end
 
     buildGrid(PartsFolder)
-
-    -- Force initial scan & queue population
     for i = 1, #AllNodes do
         local node = AllNodes[i]
         local num = getPartNumber(node.Part)
@@ -404,23 +536,36 @@ local function Start()
         end
         addToQueue(node)
     end
-
     solveLoop()
 
-    -- Debounced grid rebuild
     local rebuildDebounce = false
-    local function scheduleRebuild()
+    PartsFolder.ChildAdded:Connect(function()
         if rebuildDebounce then return end
         rebuildDebounce = true
-        task.delay(0.06, function()
-            if not _G.StopMinesweeper then
+        task.delay(0.08, function()
+            if not _G.StopMinesweeper then 
+                buildGrid(PartsFolder)
+                for i = 1, #AllNodes do
+                    local node = AllNodes[i]
+                    if node.Number then
+                        clearVisual(node)
+                    end
+                end
+            end
+            rebuildDebounce = false
+        end)
+    end)
+
+    PartsFolder.ChildRemoved:Connect(function()
+        if rebuildDebounce then return end
+        rebuildDebounce = true
+        task.delay(0.08, function()
+            if not _G.StopMinesweeper then 
                 buildGrid(PartsFolder)
             end
             rebuildDebounce = false
         end)
-    end
-    PartsFolder.ChildAdded:Connect(scheduleRebuild)
-    PartsFolder.ChildRemoved:Connect(scheduleRebuild)
+    end)
 
     local accumulator = 0
     RunService.Heartbeat:Connect(function(dt)
