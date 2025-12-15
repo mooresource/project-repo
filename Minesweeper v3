@@ -1,0 +1,751 @@
+local FLAG_CONTAINER_NAME = "Flag"
+local PARTS_FOLDER_NAME = "Parts"
+local VISUALIZER_NAME = "PredictorVis"
+
+local SAFE_COLOR = Color3.fromRGB(46, 204, 113)
+local BOMB_COLOR = Color3.fromRGB(231, 76, 60)
+local PROBABILITY_COLOR = Color3.fromRGB(52, 152, 219) -- NEW: Blue for probability results
+
+_G.StopMinesweeper = false
+
+-- Services
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local task = task
+
+-- Solver Constants (Script 2 Logic)
+local SOLVE_INTERVAL = 0.015
+local SCAN_PER_TICK = 30
+local PROCESS_BATCH_SIZE = 150
+local MAX_SUBSET_CHECKS = 60
+local CSP_CELL_LIMIT = 14 -- Used by the fast, certainty-focused CSP
+local VISUAL_UPDATE_BATCH = 15
+
+-- Hybrid Solver Constants (Script 1 Logic)
+local STUCK_LIMIT = 5 -- After this many failed logic cycles, run the probability solver
+local MAX_PROBABILITY_ITERATIONS = 4096 -- Max configurations to check for probability (tradeoff speed/accuracy)
+local PROBABILITY_CLUSTER_LIMIT = 16 -- Max number of UNKNOWN cells for the heavy probability solver (Up from 14)
+
+-- Utility Function for rounding
+local function mathRound(x)
+    return math.floor(x + 0.5)
+end
+
+-- Solver State
+local Stats = {
+    BasicSolves = 0,
+    SubsetSolves = 0,
+    CSPSolves = 0,
+    TotalProcessed = 0
+}
+
+local Grid = {}
+local AllNodes = {}
+local ActiveQueue = {}
+local InQueue = {}
+local DirtyVisuals = {}
+
+local VisualPool = {SAFE = {}, BOMB = {}, PROBABILITY = {}} -- Added PROBABILITY pool
+local MAX_POOL_SIZE = 20
+
+local CSPCache = {}
+local CSPCacheSize = 0
+local MAX_CACHE_SIZE = 50
+
+-- --- Utility Functions ---
+
+local function getKey(cx, cz)
+    return cx * 10000 + cz
+end
+
+local function fastRemove(t, index)
+    local count = #t
+    if index ~= count then t[index] = t[count] end
+    t[count] = nil
+end
+
+local function addToQueue(node)
+    if node and node.Number and not node.Solved and not InQueue[node] then
+        InQueue[node] = true
+        ActiveQueue[#ActiveQueue + 1] = node
+    end
+end
+
+local function hasNumberGui(part)
+    if not part then return false end
+    return part:FindFirstChild("NumberGui") ~= nil or part:FindFirstChild("SurfaceGui") ~= nil
+end
+
+local function getPartNumber(part)
+    if not part then return nil end
+    local gui = part:FindFirstChild("NumberGui") or part:FindFirstChild("SurfaceGui")
+    if gui then
+        for _, child in ipairs(gui:GetDescendants()) do
+            if child:IsA("TextLabel") and child.Text ~= "" then
+                local clean = string.match(child.Text, "%d+")
+                if clean then return tonumber(clean) end
+            end
+        end
+    end
+    return nil
+end
+
+local function queueVisualUpdate(node, vType, prob) -- MODIFIED: Added prob
+    DirtyVisuals[node] = {type = vType, prob = prob}
+end
+
+local function createVisualGUI(vType, probability) -- MODIFIED: Added probability
+    local pool = VisualPool[vType]
+    local gui, frame, text
+
+    if #pool > 0 then
+        gui = table.remove(pool)
+        frame = gui.Frame
+        text = frame.TextLabel
+    else
+        gui = Instance.new("SurfaceGui")
+        gui.Name = VISUALIZER_NAME
+        gui.Face = Enum.NormalId.Top
+        gui.AlwaysOnTop = true
+        gui.LightInfluence = 0
+        gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+        gui.PixelsPerStud = 20
+
+        frame = Instance.new("Frame")
+        frame.Name = "Frame"
+        frame.Size = UDim2.new(1, 0, 1, 0)
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+
+        text = Instance.new("TextLabel")
+        text.Name = "TextLabel"
+        text.Size = UDim2.new(1, 0, 1, 0)
+        text.BackgroundTransparency = 1
+        text.TextStrokeTransparency = 0.5
+        text.Font = Enum.Font.GothamBold
+        text.Parent = frame
+    end
+
+    if vType == "BOMB" then
+        frame.BackgroundColor3 = BOMB_COLOR
+        frame.BackgroundTransparency = 0.2
+        text.Text = "💣"
+        text.TextColor3 = Color3.new(1, 1, 1)
+        text.TextScaled = true
+    elseif vType == "SAFE" then
+        frame.BackgroundColor3 = SAFE_COLOR
+        frame.BackgroundTransparency = 0.2
+        text.Text = "✓"
+        text.TextColor3 = Color3.new(1, 1, 1)
+        text.TextScaled = true
+    elseif vType == "PROBABILITY" then -- NEW: Probability Visuals
+        -- Color gradient: blend blue (safe guess) to red (risky guess)
+        local danger = math.min(1, probability)
+        frame.BackgroundColor3 = PROBABILITY_COLOR:lerp(BOMB_COLOR, danger) 
+        frame.BackgroundTransparency = 0.2
+        -- Display the rounded percentage
+        text.Text = string.format("%d%%", mathRound(probability * 100))
+        text.TextColor3 = Color3.new(1, 1, 1)
+        text.TextScaled = true
+    end
+
+    return gui
+end
+
+local function flushVisualUpdates()
+    local count = 0
+    for node, data in pairs(DirtyVisuals) do
+        if not node.Part then continue end
+
+        local existing = node.Part:FindFirstChild(VISUALIZER_NAME)
+        if existing then
+            local oldType = node.VisualType
+            -- Attempt to return the GUI to the appropriate pool (BOMB, SAFE, or PROBABILITY)
+            if oldType and VisualPool[oldType] and #VisualPool[oldType] < MAX_POOL_SIZE then
+                existing.Parent = nil
+                table.insert(VisualPool[oldType], existing)
+            else
+                existing:Destroy()
+            end
+        end
+
+        local gui = createVisualGUI(data.type, data.prob) -- MODIFIED: Pass probability
+        gui.Parent = node.Part
+        node.VisualType = data.type
+
+        count = count + 1
+        if count >= VISUAL_UPDATE_BATCH then
+            task.wait()
+            count = 0
+        end
+    end
+    DirtyVisuals = {}
+end
+
+local function clearVisual(node)
+    if not node or not node.Part then return end
+    local v = node.Part:FindFirstChild(VISUALIZER_NAME)
+    if v then
+        local vType = node.VisualType
+        if vType and VisualPool[vType] and #VisualPool[vType] < MAX_POOL_SIZE then
+            v.Parent = nil
+            table.insert(VisualPool[vType], v)
+        else
+            v:Destroy()
+        end
+    end
+    node.VisualType = nil
+end
+
+-- --- Grid Building (Dynamic Detection) ---
+
+local function buildGrid(folder)
+    for _, pool in pairs(VisualPool) do
+        for i = 1, #pool do
+            pool[i]:Destroy()
+        end
+        table.clear(pool)
+    end
+    
+    Grid = {}
+    AllNodes = {}
+    ActiveQueue = {}
+    InQueue = {}
+    DirtyVisuals = {}
+    
+    local parts = folder:GetChildren()
+    if #parts == 0 then return end
+    
+    -- Dynamic detection logic remains the same...
+    local firstPart = parts[1]
+    local TILE_SIZE = math.max(firstPart.Size.X, firstPart.Size.Z)
+    
+    local minX, minZ = math.huge, math.huge
+    for i = 1, #parts do
+        local part = parts[i]
+        if part and part:IsA("BasePart") then
+            minX = math.min(minX, part.Position.X)
+            minZ = math.min(minZ, part.Position.Z)
+        end
+    end
+    
+    local BOARD_ORIGIN_X = minX - (TILE_SIZE / 2)
+    local BOARD_ORIGIN_Z = minZ - (TILE_SIZE / 2)
+    
+    for i = 1, #parts do
+        local part = parts[i]
+        if part and part:IsA("BasePart") then
+            local pos = part.Position
+            local cx = math.floor((pos.X - BOARD_ORIGIN_X) / TILE_SIZE + 0.5) 
+            local cz = math.floor((pos.Z - BOARD_ORIGIN_Z) / TILE_SIZE + 0.5)
+            
+            local node = {
+                Part = part,
+                Cx = cx,
+                Cz = cz,
+                Number = nil,
+                State = "UNKNOWN",
+                Solved = false,
+                Neighbors = {},
+                NeighborCount = 0,
+                VisualType = nil
+            }
+            Grid[getKey(cx, cz)] = node
+            AllNodes[#AllNodes + 1] = node
+        end
+    end
+    
+    for i = 1, #AllNodes do
+        local node = AllNodes[i]
+        local cx, cz = node.Cx, node.Cz
+        local neighbors = {}
+        for x = -1, 1 do
+            for z = -1, 1 do
+                if not (x == 0 and z == 0) then
+                    local neighbor = Grid[getKey(cx + x, cz + z)]
+                    if neighbor then
+                        neighbors[#neighbors + 1] = neighbor
+                    end
+                end
+            end
+        end
+        node.Neighbors = neighbors
+        node.NeighborCount = #neighbors
+    end
+end
+
+local function updateNodeCounts(node)
+    local unknowns, bombCount = {}, 0
+    local neighbors = node.Neighbors
+    for i = 1, node.NeighborCount do
+        local n = neighbors[i]
+        local st = n.State
+        if st == "BOMB" then
+            bombCount = bombCount + 1
+        elseif st == "UNKNOWN" then
+            if not n.Number then
+                unknowns[#unknowns + 1] = n
+            else
+                n.State = "SAFE"
+            end
+        end
+    end
+    return bombCount, unknowns
+end
+
+-- --- Solver Algorithms ---
+
+-- advancedSubsets function remains the same (Script 2 Logic)
+local function advancedSubsets()
+    local qSize = #ActiveQueue
+    if qSize < 2 then return false end
+    local limit = math.min(qSize, MAX_SUBSET_CHECKS)
+    local nodeData = {}
+    -- ... (Logic of subset solver remains the same) ...
+    for i = 1, limit do
+        local node = ActiveQueue[i]
+        if node then
+            local bombs, unks = updateNodeCounts(node)
+            local needs = node.Number - bombs
+            if #unks > 0 and needs > 0 then
+                local unkSet = {}
+                for j = 1, #unks do unkSet[unks[j]] = true end
+                nodeData[i] = {node = node, unks = unks, unkSet = unkSet, needs = needs, size = #unks}
+            end
+        end
+    end
+    for i = 1, limit do
+        local dataA = nodeData[i]
+        if not dataA then continue end
+        for j = i + 1, limit do
+            local dataB = nodeData[j]
+            if not dataB then continue end
+            local nodeA, nodeB = dataA.node, dataB.node
+            if math.abs(nodeA.Cx - nodeB.Cx) > 2 or math.abs(nodeA.Cz - nodeB.Cz) > 2 then
+                continue
+            end
+            local isAsubB, isBsubA = true, true
+            for k = 1, dataA.size do
+                if not dataB.unkSet[dataA.unks[k]] then isAsubB = false end
+            end
+            for k = 1, dataB.size do
+                if not dataA.unkSet[dataB.unks[k]] then isBsubA = false end
+            end
+            if not isAsubB and not isBsubA then continue end
+            local smaller, larger, needSmall, needLarge
+            if isAsubB and dataA.size < dataB.size then
+                smaller, larger = dataA, dataB
+                needSmall, needLarge = dataA.needs, dataB.needs
+            elseif isBsubA and dataB.size < dataA.size then
+                smaller, larger = dataB, dataA
+                needSmall, needLarge = dataB.needs, dataA.needs
+            else
+                continue
+            end
+            local diffNeed = needLarge - needSmall
+            local diffNodes = {}
+            for k = 1, larger.size do
+                local u = larger.unks[k]
+                if not smaller.unkSet[u] then
+                    diffNodes[#diffNodes + 1] = u
+                end
+            end
+            if #diffNodes > 0 then
+                if diffNeed == 0 then
+                    for k = 1, #diffNodes do
+                        local n = diffNodes[k]
+                        if n.State == "UNKNOWN" then
+                            n.State = "SAFE"
+                            queueVisualUpdate(n, "SAFE")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                        end
+                    end
+                    Stats.SubsetSolves = Stats.SubsetSolves + #diffNodes
+                    return true
+                elseif diffNeed == #diffNodes then
+                    for k = 1, #diffNodes do
+                        local n = diffNodes[k]
+                        if n.State == "UNKNOWN" then
+                            n.State = "BOMB"
+                            queueVisualUpdate(n, "BOMB")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                        end
+                    end
+                    Stats.SubsetSolves = Stats.SubsetSolves + #diffNodes
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- hashConfiguration remains the same
+local function hashConfiguration(cells)
+    local parts = {}
+    for i = 1, #cells do
+        parts[#parts + 1] = cells[i].Cx
+        parts[#parts + 1] = cells[i].Cz
+    end
+    return table.concat(parts, ",")
+end
+
+-- solveCSP remains the same (Fast, Certainty-focused CSP)
+local function solveCSP()
+    if #ActiveQueue < 3 or #ActiveQueue > 15 then return false end
+    local unknownSet = {}
+    local constraints = {}
+    for i = 1, math.min(5, #ActiveQueue) do
+        local node = ActiveQueue[i]
+        local bombs, unks = updateNodeCounts(node)
+        local needs = node.Number - bombs
+        if #unks > 0 and needs > 0 then
+            local unkSet = {}
+            for j = 1, #unks do
+                unkSet[unks[j]] = true
+                unknownSet[unks[j]] = true
+            end
+            constraints[#constraints + 1] = {unkSet = unkSet, needs = needs}
+        end
+    end
+    local cells = {}
+    for cell in pairs(unknownSet) do cells[#cells + 1] = cell end
+    if #cells == 0 or #cells > CSP_CELL_LIMIT or #constraints == 0 then return false end
+    local hash = hashConfiguration(cells)
+    if CSPCache[hash] then return false end
+    local n = #cells
+    local maxConfigs = math.min(2^n, 2048)
+    local alwaysBomb, alwaysSafe = {}, {}
+    for i = 1, n do alwaysBomb[i] = true; alwaysSafe[i] = true end
+    local validCount = 0
+    for mask = 0, maxConfigs - 1 do
+        local config, tempMask = {}, mask
+        for i = 1, n do
+            config[i] = tempMask % 2
+            tempMask = math.floor(tempMask / 2)
+        end
+        local valid = true
+        for j = 1, #constraints do
+            local c = constraints[j]
+            local bombCount = 0
+            for k = 1, n do
+                if c.unkSet[cells[k]] and config[k] == 1 then
+                    bombCount = bombCount + 1
+                end
+            end
+            if bombCount ~= c.needs then valid = false break end
+        end
+        if valid then
+            validCount = validCount + 1
+            for i = 1, n do
+                if config[i] == 0 then alwaysBomb[i] = false end
+                if config[i] == 1 then alwaysSafe[i] = false end
+            end
+        end
+    end
+    if validCount == 0 then return false end
+    CSPCache[hash] = true
+    CSPCacheSize = CSPCacheSize + 1
+    if CSPCacheSize > MAX_CACHE_SIZE then
+        CSPCache = {}
+        CSPCacheSize = 0
+    end
+    local changed = false
+    for i = 1, n do
+        local u = cells[i]
+        if u.State == "UNKNOWN" then
+            if alwaysBomb[i] then
+                u.State = "BOMB"
+                queueVisualUpdate(u, "BOMB")
+                for j = 1, u.NeighborCount do addToQueue(u.Neighbors[j]) end
+                changed = true
+            elseif alwaysSafe[i] then
+                u.State = "SAFE"
+                queueVisualUpdate(u, "SAFE")
+                for j = 1, u.NeighborCount do addToQueue(u.Neighbors[j]) end
+                changed = true
+            end
+        end
+    end
+    if changed then Stats.CSPSolves = Stats.CSPSolves + 1 end
+    return changed
+end
+
+-- NEW FUNCTION: calculateProbabilities (Script 1's power)
+local function calculateProbabilities()
+    -- Step 1: Identify a target ambiguous cluster from the ActiveQueue frontier
+    local unknownSet = {}
+    local constraints = {}
+    -- Look at up to 10 frontier nodes to try and find a large, connected cluster
+    for i = 1, math.min(#ActiveQueue, 10) do 
+        local node = ActiveQueue[i]
+        local bombs, unks = updateNodeCounts(node)
+        local needs = node.Number - bombs
+        if #unks > 0 and needs > 0 then
+            local unkSet = {}
+            for j = 1, #unks do
+                unkSet[unks[j]] = true
+                unknownSet[unks[j]] = true
+            end
+            constraints[#constraints + 1] = {unkSet = unkSet, needs = needs}
+        end
+    end
+    
+    local cells = {}
+    for cell in pairs(unknownSet) do cells[#cells + 1] = cell end
+    
+    -- Check limits for heavy computation
+    if #cells == 0 or #cells > PROBABILITY_CLUSTER_LIMIT or #constraints == 0 then return false end
+    
+    local hash = hashConfiguration(cells)
+    if CSPCache[hash] then return false end -- Skip if already fully analyzed
+
+    -- --- Script 1 Probability Calculation ---
+    local n = #cells
+    local maxConfigs = math.min(2^n, MAX_PROBABILITY_ITERATIONS)
+    local mineCounts = {} -- Tracks how many times each cell is a mine
+    for i = 1, n do mineCounts[i] = 0 end 
+    local validCount = 0
+
+    for mask = 0, maxConfigs - 1 do
+        local config, tempMask = {}, mask
+        for i = 1, n do
+            config[i] = tempMask % 2
+            tempMask = math.floor(tempMask / 2)
+        end
+        
+        local valid = true
+        for j = 1, #constraints do
+            local c = constraints[j]
+            local bombCount = 0
+            for k = 1, n do
+                if c.unkSet[cells[k]] and config[k] == 1 then
+                    bombCount = bombCount + 1
+                end
+            end
+            if bombCount ~= c.needs then valid = false break end
+        end
+        
+        if valid then
+            validCount = validCount + 1
+            for i = 1, n do
+                if config[i] == 1 then mineCounts[i] = mineCounts[i] + 1 end
+            end
+        end
+    end
+    
+    if validCount == 0 then return false end
+    
+    -- Cache this cluster to prevent recalculation
+    CSPCache[hash] = true
+    CSPCacheSize = CSPCacheSize + 1
+    if CSPCacheSize > MAX_CACHE_SIZE then
+        CSPCache = {}
+        CSPCacheSize = 0
+    end
+    
+    local changed = false
+    -- Step 2: Apply the calculated probabilities
+    for i = 1, n do
+        local u = cells[i]
+        local probability = mineCounts[i] / validCount
+        
+        if u.State == "UNKNOWN" then
+            if probability == 1 then
+                -- 100% Certainty (Script 2 failed to find, but Script 1 succeeded)
+                u.State = "BOMB"
+                queueVisualUpdate(u, "BOMB")
+                for j = 1, u.NeighborCount do addToQueue(u.Neighbors[j]) end
+                changed = true
+            elseif probability == 0 then
+                -- 0% Certainty
+                u.State = "SAFE"
+                queueVisualUpdate(u, "SAFE")
+                for j = 1, u.NeighborCount do addToQueue(u.Neighbors[j]) end
+                changed = true
+            else
+                -- Ambiguous, show the guess probability (this doesn't count as 'changed' for logic flow)
+                queueVisualUpdate(u, "PROBABILITY", probability)
+            end
+        end
+    end
+    
+    if changed then Stats.CSPSolves = Stats.CSPSolves + 1 end
+    return changed
+end
+
+-- --- Main Loop ---
+
+local scanIndex = 1
+local stuckCounter = 0
+
+local function solveLoop()
+    -- 1. Scanning Phase (Script 2)
+    for i = 1, SCAN_PER_TICK do
+        if scanIndex > #AllNodes then scanIndex = 1 end
+        local node = AllNodes[scanIndex]
+        if node then
+            if hasNumberGui(node.Part) then
+                clearVisual(node)
+            end
+            local num = getPartNumber(node.Part)
+            if num and not node.Number then
+                node.Number = num
+                node.State = "SAFE"
+                clearVisual(node)
+                addToQueue(node)
+                for j = 1, node.NeighborCount do addToQueue(node.Neighbors[j]) end
+            elseif node.Number and num then
+                clearVisual(node)
+            end
+        end
+        scanIndex = scanIndex + 1
+    end
+
+    -- 2. Processing Phase (Basic Logic - Script 2)
+    local processed = 0
+    local cycleChanged = false
+    while #ActiveQueue > 0 and processed < PROCESS_BATCH_SIZE do
+        local idx = 1
+        -- ... (Basic logic remains the same) ...
+        while idx <= #ActiveQueue and processed < PROCESS_BATCH_SIZE do
+            local node = ActiveQueue[idx]
+            if node.Solved then
+                InQueue[node] = nil
+                fastRemove(ActiveQueue, idx)
+            else
+                processed = processed + 1
+                local bombCount, unkList = updateNodeCounts(node)
+                local unkCount = #unkList
+                local needs = node.Number - bombCount
+                local changed = false
+                if needs == unkCount and unkCount > 0 then
+                    for k = 1, unkCount do
+                        local n = unkList[k]
+                        if n.State == "UNKNOWN" then
+                            n.State = "BOMB"
+                            queueVisualUpdate(n, "BOMB")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                            changed = true
+                        end
+                    end
+                    node.Solved = true
+                    Stats.BasicSolves = Stats.BasicSolves + unkCount
+                elseif needs == 0 and unkCount > 0 then
+                    for k = 1, unkCount do
+                        local n = unkList[k]
+                        if n.State == "UNKNOWN" then
+                            n.State = "SAFE"
+                            queueVisualUpdate(n, "SAFE")
+                            for t = 1, n.NeighborCount do addToQueue(n.Neighbors[t]) end
+                            changed = true
+                        end
+                    end
+                    node.Solved = true
+                    Stats.BasicSolves = Stats.BasicSolves + unkCount
+                elseif unkCount == 0 then
+                    node.Solved = true
+                end
+                if changed then cycleChanged = true end
+                if node.Solved then
+                    InQueue[node] = nil
+                    fastRemove(ActiveQueue, idx)
+                else
+                    idx = idx + 1
+                end
+            end
+        end
+        if not cycleChanged then break end
+    end
+    
+    -- 3. Advanced Solving (Subset & CSP - Script 2)
+    if not cycleChanged and #ActiveQueue > 0 then
+        cycleChanged = advancedSubsets()
+    end
+    if not cycleChanged and #ActiveQueue > 0 then
+        cycleChanged = solveCSP()
+    end
+    
+    -- 4. HYBRID PROBABILITY PHASE (Script 1's power)
+    -- Only run this heavy check if logic failed STUCK_LIMIT times
+    if not cycleChanged and stuckCounter >= STUCK_LIMIT then
+        cycleChanged = calculateProbabilities()
+    end
+
+    -- Update stick counter
+    if cycleChanged then
+        stuckCounter = 0
+    else
+        stuckCounter = stuckCounter + 1
+    end
+
+    -- Update visuals
+    if next(DirtyVisuals) then
+        flushVisualUpdates()
+    end
+    Stats.TotalProcessed = Stats.TotalProcessed + processed
+end
+
+-- --- Start Function ---
+
+local function Start()
+    local FlagContainer = Workspace:FindFirstChild(FLAG_CONTAINER_NAME)
+    local PartsFolder = FlagContainer and FlagContainer:FindFirstChild(PARTS_FOLDER_NAME)
+    if not PartsFolder then return end
+
+    buildGrid(PartsFolder)
+    for i = 1, #AllNodes do
+        local node = AllNodes[i]
+        local num = getPartNumber(node.Part)
+        if num then
+            node.Number = num
+            node.State = "SAFE"
+            clearVisual(node)
+        end
+        addToQueue(node)
+    end
+    solveLoop()
+
+    local rebuildDebounce = false
+    PartsFolder.ChildAdded:Connect(function()
+        if rebuildDebounce then return end
+        rebuildDebounce = true
+        task.delay(0.08, function()
+            if not _G.StopMinesweeper then 
+                buildGrid(PartsFolder)
+                for i = 1, #AllNodes do
+                    local node = AllNodes[i]
+                    if node.Number then
+                        clearVisual(node)
+                    end
+                end
+            end
+            rebuildDebounce = false
+        end)
+    end)
+    
+    PartsFolder.ChildRemoved:Connect(function()
+        if rebuildDebounce then return end
+        rebuildDebounce = true
+        task.delay(0.08, function()
+            if not _G.StopMinesweeper then 
+                buildGrid(PartsFolder)
+            end
+            rebuildDebounce = false
+        end)
+    end)
+
+    local accumulator = 0
+    RunService.Heartbeat:Connect(function(dt)
+        if _G.StopMinesweeper then return end
+        accumulator = accumulator + dt
+        while accumulator >= SOLVE_INTERVAL do
+            accumulator = accumulator - SOLVE_INTERVAL
+            if #PartsFolder:GetChildren() > 0 then
+                solveLoop()
+            end
+        end
+    end)
+end
+
+task.spawn(start)
