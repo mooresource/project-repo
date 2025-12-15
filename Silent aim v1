@@ -1,0 +1,506 @@
+--// Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Mouse = LocalPlayer:GetMouse()
+
+local Constants = {
+    GUI_NAME = "FOVGui",
+    GUI_SIZE = Vector2.new(280, 330), -- Increased height to fit the new button
+    GUI_POSITION = Vector2.new(20, 100),
+    
+    COLORS = {
+        Background = Color3.fromRGB(20, 20, 25),
+        Container = Color3.fromRGB(30, 30, 35),
+        ContainerHover = Color3.fromRGB(35, 35, 40),
+        ContainerActive = Color3.fromRGB(40, 40, 45),
+        Accent = Color3.fromRGB(255, 180, 0),
+        Input = Color3.fromRGB(45, 45, 50),
+        InputHover = Color3.fromRGB(55, 55, 60),
+        Text = Color3.fromRGB(200, 200, 200),
+        TextBright = Color3.fromRGB(255, 255, 255),
+        Active = Color3.fromRGB(0, 200, 80),
+        Inactive = Color3.fromRGB(60, 60, 65),
+    },
+    
+    LIMITS = {
+        FOVRadiusMin = 10,
+        FOVRadiusMax = 800,
+        MaxDistanceMin = 100,
+        MaxDistanceMax = 10000,
+    }
+}
+
+--// Configuration
+local Config = {
+    Enabled = true,
+    FollowMouse = true, -- New Setting
+    TeamCheck = false,
+    WallCheck = false,
+    ShowFOV = true,
+    FOVRadius = 150,
+    MaxDistance = 1000,
+    TargetUsername = "", 
+}
+
+local Visual = {
+    FOVColor = Color3.fromRGB(255, 255, 255),
+    FOVThickness = 1,
+    HighlightFill = Color3.fromRGB(255, 0, 0),
+    HighlightOutline = Color3.fromRGB(255, 255, 255),
+    FillTransparency = 0.5,
+    OutlineTransparency = 0,
+}
+
+local State = {
+    CurrentTarget = nil,
+    CurrentHighlight = nil,
+    Connections = {},
+    Hooks = {},
+    ClickToTargetMode = false,
+    FOVRingObj = nil 
+}
+
+--// Cleanup
+local function Cleanup()
+    local oldGui = PlayerGui:FindFirstChild(Constants.GUI_NAME)
+    if oldGui then oldGui:Destroy() end
+    
+    if State.CurrentHighlight then 
+        State.CurrentHighlight:Destroy()
+        State.CurrentHighlight = nil
+    end
+
+    for _, connection in pairs(State.Connections) do
+        if connection then connection:Disconnect() end
+    end
+    State.Connections = {}
+end
+
+--// Utility Function
+local function AddConnection(name, connection)
+    if State.Connections[name] then State.Connections[name]:Disconnect() end
+    State.Connections[name] = connection
+end
+
+local function Clamp(value, min, max)
+    return math.max(min, math.min(max, value))
+end
+
+local function IsVisible(targetPart)
+    if not Config.WallCheck then return true end
+    local ignoreList = {LocalPlayer.Character, targetPart.Parent}
+    local parts = Camera:GetPartsObscuringTarget({targetPart.Position}, ignoreList)
+    return #parts == 0
+end
+
+--// FOV Position Logic
+local function GetFOVPosition()
+    if Config.FollowMouse then
+        return UserInputService:GetMouseLocation()
+    else
+        local viewport = Camera.ViewportSize
+        return Vector2.new(viewport.X / 2, viewport.Y / 2)
+    end
+end
+
+--// Target Logic
+local function GetClosestPlayerToCursor()
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return nil end
+    
+    -- Specific Target Logic
+    if Config.TargetUsername ~= "" then
+        for _, Player in pairs(Players:GetPlayers()) do
+            if Player ~= LocalPlayer then
+                local matchesUsername = string.find(string.lower(Player.Name), string.lower(Config.TargetUsername))
+                local matchesDisplay = string.find(string.lower(Player.DisplayName), string.lower(Config.TargetUsername))
+                
+                if matchesUsername or matchesDisplay then
+                    if not Config.TeamCheck or Player.Team ~= LocalPlayer.Team then
+                        local Character = Player.Character
+                        if Character and Character:FindFirstChild("Head") and Character:FindFirstChild("Humanoid") and Character.Humanoid.Health > 0 then
+                            local ScreenPos, OnScreen = Camera:WorldToScreenPoint(Character.Head.Position)
+                            if OnScreen then return Player end
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+    
+    -- Closest to FOV Center Logic
+    local ClosestPlayer, ShortestDistance = nil, Config.FOVRadius
+    local OriginPos = GetFOVPosition() -- Gets either Mouse Pos or Screen Center
+    
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer then
+            if not Config.TeamCheck or Player.Team ~= LocalPlayer.Team then
+                local Character = Player.Character
+                if Character and Character:FindFirstChild("Head") and Character:FindFirstChild("Humanoid") and Character.Humanoid.Health > 0 then
+                    local Head = Character.Head
+                    local Root = Character.HumanoidRootPart
+                    local Distance = (LocalPlayer.Character.HumanoidRootPart.Position - Root.Position).Magnitude
+                    
+                    if Distance <= Config.MaxDistance and IsVisible(Head) then
+                        local ScreenPos, OnScreen = Camera:WorldToScreenPoint(Head.Position)
+                        if OnScreen then
+                            local ScreenDist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - OriginPos).Magnitude
+                            if ScreenDist < ShortestDistance then
+                                ClosestPlayer, ShortestDistance = Player, ScreenDist
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return ClosestPlayer
+end
+
+--// Highlight System
+local Highlight = {}
+function Highlight.Apply(player)
+    if not player or not player.Character then return nil end
+    local h = Instance.new("Highlight")
+    h.FillColor = Visual.HighlightFill
+    h.OutlineColor = Visual.HighlightOutline
+    h.FillTransparency = Visual.FillTransparency
+    h.OutlineTransparency = Visual.OutlineTransparency
+    h.Adornee = player.Character 
+    h.Parent = PlayerGui 
+    return h
+end
+
+function Highlight.Remove()
+    if State.CurrentHighlight then 
+        State.CurrentHighlight:Destroy()
+        State.CurrentHighlight = nil 
+    end
+end
+
+function Highlight.Update(newTarget)
+    if newTarget ~= State.CurrentTarget then
+        Highlight.Remove()
+        if newTarget then
+            State.CurrentHighlight = Highlight.Apply(newTarget)
+        end
+    end
+    State.CurrentTarget = newTarget
+end
+
+--// GUI Builder
+local GUIBuilder = {}
+
+function GUIBuilder.EnableClickToTarget(targetTextbox)
+    State.ClickToTargetMode = true
+    Mouse.Icon = "rbxasset://textures/Cursors/Crosshair.png"
+    local connection
+    connection = Mouse.Button1Down:Connect(function()
+        local target = Mouse.Target
+        if target then
+            local character = target:FindFirstAncestorOfClass("Model")
+            if character then
+                local player = Players:GetPlayerFromCharacter(character)
+                if player and player ~= LocalPlayer then
+                    Config.TargetUsername = player.Name
+                    targetTextbox.Text = player.Name
+                    State.ClickToTargetMode = false
+                    Mouse.Icon = ""
+                    connection:Disconnect()
+                end
+            end
+        end
+    end)
+    AddConnection("ClickToTarget", connection)
+end
+
+function GUIBuilder.CreateScreenGui()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = Constants.GUI_NAME
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = PlayerGui
+    return ScreenGui
+end
+
+function GUIBuilder.CreateFOVRing(parent)
+    local FOVRing = Instance.new("Frame")
+    FOVRing.Size = UDim2.new(0, Config.FOVRadius * 2, 0, Config.FOVRadius * 2)
+    FOVRing.AnchorPoint = Vector2.new(0.5, 0.5)
+    FOVRing.BackgroundTransparency = 1
+    FOVRing.Parent = parent
+    
+    local Stroke = Instance.new("UIStroke")
+    Stroke.Thickness = Visual.FOVThickness
+    Stroke.Color = Visual.FOVColor
+    Stroke.Parent = FOVRing
+    
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(1, 0)
+    Corner.Parent = FOVRing
+    
+    State.FOVRingObj = FOVRing
+    return FOVRing
+end
+
+function GUIBuilder.CreateControlFrame(parent)
+    local ControlFrame = Instance.new("Frame")
+    ControlFrame.Size = UDim2.new(0, Constants.GUI_SIZE.X, 0, Constants.GUI_SIZE.Y)
+    ControlFrame.Position = UDim2.new(0, Constants.GUI_POSITION.X, 0, Constants.GUI_POSITION.Y)
+    ControlFrame.BackgroundColor3 = Constants.COLORS.Background
+    ControlFrame.BorderSizePixel = 0
+    ControlFrame.Parent = parent
+    
+    local Corner = Instance.new("UICorner")
+    Corner.CornerRadius = UDim.new(0, 4)
+    Corner.Parent = ControlFrame
+    
+    local AccentBar = Instance.new("Frame")
+    AccentBar.Size = UDim2.new(1, 0, 0, 2)
+    AccentBar.BackgroundColor3 = Constants.COLORS.Accent
+    AccentBar.BorderSizePixel = 0
+    AccentBar.Parent = ControlFrame
+    
+    local TitleLabel = Instance.new("TextLabel")
+    TitleLabel.Size = UDim2.new(1, -20, 0, 30)
+    TitleLabel.Position = UDim2.new(0, 10, 0, 8)
+    TitleLabel.BackgroundTransparency = 1
+    TitleLabel.Text = "ASTA:CONFIG"
+    TitleLabel.Font = Enum.Font.GothamBold
+    TitleLabel.TextSize = 14
+    TitleLabel.TextColor3 = Constants.COLORS.Accent
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TitleLabel.Parent = ControlFrame
+
+    return ControlFrame
+end
+
+function GUIBuilder.CreateContentFrame(parent)
+    local ContentFrame = Instance.new("Frame")
+    ContentFrame.Size = UDim2.new(1, -20, 1, -48)
+    ContentFrame.Position = UDim2.new(0, 10, 0, 38)
+    ContentFrame.BackgroundTransparency = 1
+    ContentFrame.Parent = parent
+    
+    local UIList = Instance.new("UIListLayout")
+    UIList.Padding = UDim.new(0, 8)
+    UIList.HorizontalAlignment = Enum.HorizontalAlignment.Left
+    UIList.SortOrder = Enum.SortOrder.LayoutOrder
+    UIList.Parent = ContentFrame
+    
+    return ContentFrame
+end
+
+function GUIBuilder.MakeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+function GUIBuilder.CreateToggle(parent, name, default, callback)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 28)
+    Container.BackgroundColor3 = Constants.COLORS.Container
+    Container.Parent = parent
+    Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 3)
+    
+    local ToggleBtn = Instance.new("TextButton")
+    ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
+    ToggleBtn.BackgroundTransparency = 1
+    ToggleBtn.Font = Enum.Font.Gotham
+    ToggleBtn.TextSize = 12
+    ToggleBtn.TextColor3 = Constants.COLORS.Text
+    ToggleBtn.TextXAlignment = Enum.TextXAlignment.Left
+    ToggleBtn.Text = "   " .. name
+    ToggleBtn.Parent = Container
+    
+    local StatusBox = Instance.new("Frame")
+    StatusBox.Size = UDim2.new(0, 40, 0, 18)
+    StatusBox.Position = UDim2.new(1, -50, 0.5, -9)
+    StatusBox.BackgroundColor3 = default and Constants.COLORS.Active or Constants.COLORS.Inactive
+    StatusBox.Parent = Container
+    Instance.new("UICorner", StatusBox).CornerRadius = UDim.new(0, 2)
+    
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Size = UDim2.new(1, 0, 1, 0)
+    StatusText.BackgroundTransparency = 1
+    StatusText.Font = Enum.Font.GothamBold
+    StatusText.TextSize = 10
+    StatusText.TextColor3 = Constants.COLORS.TextBright
+    StatusText.Text = default and "ON" or "OFF"
+    StatusText.Parent = StatusBox
+    
+    ToggleBtn.MouseButton1Click:Connect(function()
+        default = not default
+        StatusBox.BackgroundColor3 = default and Constants.COLORS.Active or Constants.COLORS.Inactive
+        StatusText.Text = default and "ON" or "OFF"
+        callback(default)
+    end)
+end
+
+function GUIBuilder.CreateTextbox(parent, name, default, callback, minVal, maxVal, isTargetBox)
+    local Container = Instance.new("Frame")
+    Container.Size = UDim2.new(1, 0, 0, 28)
+    Container.BackgroundColor3 = Constants.COLORS.Container
+    Container.Parent = parent
+    Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 3)
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(0.5, 0, 1, 0)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.Gotham
+    Label.TextSize = 12
+    Label.TextColor3 = Constants.COLORS.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Text = name
+    Label.Parent = Container
+    
+    local InputBox = Instance.new("TextBox")
+    InputBox.Size = UDim2.new(0, isTargetBox and 80 or 60, 0, 18)
+    InputBox.Position = UDim2.new(1, isTargetBox and -90 or -70, 0.5, -9)
+    InputBox.BackgroundColor3 = Constants.COLORS.Input
+    InputBox.Font = Enum.Font.GothamBold
+    InputBox.TextSize = 11
+    InputBox.TextColor3 = Constants.COLORS.Accent
+    InputBox.Text = tostring(default)
+    InputBox.ClearTextOnFocus = false
+    InputBox.Parent = Container
+    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 2)
+    
+    if isTargetBox then
+        local ClickBtn = Instance.new("TextButton")
+        ClickBtn.Size = UDim2.new(0, 40, 0, 18)
+        ClickBtn.Position = UDim2.new(1, -45, 0.5, -9) 
+        ClickBtn.BackgroundColor3 = Constants.COLORS.Accent
+        ClickBtn.Text = "SEL"
+        ClickBtn.Font = Enum.Font.GothamBold
+        ClickBtn.TextSize = 9
+        ClickBtn.Parent = Container
+        Instance.new("UICorner", ClickBtn).CornerRadius = UDim.new(0, 2)
+        InputBox.Position = UDim2.new(1, -130, 0.5, -9) 
+        
+        ClickBtn.MouseButton1Click:Connect(function()
+            GUIBuilder.EnableClickToTarget(InputBox)
+        end)
+    end
+
+    InputBox.FocusLost:Connect(function()
+        if isTargetBox then
+            callback(InputBox.Text)
+        else
+            local num = tonumber(InputBox.Text)
+            if num then
+                if minVal and maxVal then num = Clamp(num, minVal, maxVal) end
+                callback(num)
+                InputBox.Text = tostring(num)
+            else
+                InputBox.Text = tostring(default)
+            end
+        end
+    end)
+end
+
+--// Hooks
+local function SetupHooks()
+    -- NOTE: These will only work in an Executor environment (Synapse, Krnl, etc.)
+    if not hookmetamethod then return end
+
+    local old_namecall
+    old_namecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local args = {...}
+        local method = getnamecallmethod()
+        
+        if Config.Enabled and State.CurrentTarget and method == "Raycast" and not checkcaller() then
+            local targetPart = State.CurrentTarget.Character.Head
+            if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
+                local origin = args[1]
+                args[2] = (targetPart.Position - origin).Unit * Config.MaxDistance
+                return old_namecall(self, unpack(args))
+            end
+        end
+        return old_namecall(self, ...)
+    end)
+end
+
+--// Initialize
+local function Initialize()
+    Cleanup()
+    local ScreenGui = GUIBuilder.CreateScreenGui()
+    local FOVRing = GUIBuilder.CreateFOVRing(ScreenGui)
+    local ControlFrame = GUIBuilder.CreateControlFrame(ScreenGui)
+    GUIBuilder.MakeDraggable(ControlFrame)
+    
+    local ContentFrame = GUIBuilder.CreateContentFrame(ControlFrame)
+    
+    -- Controls
+    GUIBuilder.CreateToggle(ContentFrame, "Enabled", Config.Enabled, function(v) Config.Enabled = v end)
+    GUIBuilder.CreateToggle(ContentFrame, "Show FOV", Config.ShowFOV, function(v) Config.ShowFOV = v end)
+    -- NEW BUTTON HERE:
+    GUIBuilder.CreateToggle(ContentFrame, "Follow Mouse", Config.FollowMouse, function(v) Config.FollowMouse = v end)
+    GUIBuilder.CreateToggle(ContentFrame, "Team Check", Config.TeamCheck, function(v) Config.TeamCheck = v end)
+    GUIBuilder.CreateToggle(ContentFrame, "Wall Check", Config.WallCheck, function(v) Config.WallCheck = v end)
+    
+    GUIBuilder.CreateTextbox(ContentFrame, "FOV Radius", Config.FOVRadius, function(v) 
+        Config.FOVRadius = v 
+    end, Constants.LIMITS.FOVRadiusMin, Constants.LIMITS.FOVRadiusMax, false)
+    
+    GUIBuilder.CreateTextbox(ContentFrame, "Max Dist", Config.MaxDistance, function(v) 
+        Config.MaxDistance = v 
+    end, Constants.LIMITS.MaxDistanceMin, Constants.LIMITS.MaxDistanceMax, false)
+    
+    GUIBuilder.CreateTextbox(ContentFrame, "Target User", Config.TargetUsername, function(v) 
+        Config.TargetUsername = v 
+    end, nil, nil, true)
+    
+    -- Main Loop
+    local RunConnection = RunService.RenderStepped:Connect(function()
+        -- Update FOV Ring Position based on mode
+        local OriginPos = GetFOVPosition()
+        
+        if State.FOVRingObj then
+            State.FOVRingObj.Visible = Config.ShowFOV
+            State.FOVRingObj.Size = UDim2.new(0, Config.FOVRadius * 2, 0, Config.FOVRadius * 2)
+            State.FOVRingObj.Position = UDim2.new(0, OriginPos.X, 0, OriginPos.Y)
+        end
+        
+        -- Find Target
+        if Config.Enabled then
+            local target = GetClosestPlayerToCursor()
+            Highlight.Update(target)
+        else
+            Highlight.Update(nil)
+        end
+    end)
+    AddConnection("MainLoop", RunConnection)
+    
+    SetupHooks()
+end
+
+--// Start
+Initialize()
