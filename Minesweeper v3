@@ -96,13 +96,13 @@ local function createVisualGUI(vType)
     if vType == "BOMB" then
         frame.BackgroundColor3 = BOMB_COLOR
         frame.BackgroundTransparency = 0.2
-        text.Text = ""
+        text.Text = "💣"
         text.TextColor3 = Color3.new(1, 1, 1)
         text.TextScaled = true
     else
         frame.BackgroundColor3 = SAFE_COLOR
         frame.BackgroundTransparency = 0.2
-        text.Text = ""
+        text.Text = "✓"
         text.TextColor3 = Color3.new(1, 1, 1)
         text.TextScaled = true
     end
