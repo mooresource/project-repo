@@ -1,0 +1,582 @@
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local LogService = game:GetService("LogService")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local CONFIG = {
+    typingSpeed = 0.15,
+    minLength = 3,
+    maxLength = 15,
+    idealLength = 6,
+    autoResetTime = 300,
+    wordsPerPage = 12,
+    autoType = false,
+    useBestWord = false
+}
+
+local commonWords = {
+    ["the"] = true, ["and"] = true, ["a"] = true, ["an"] = true,
+    ["is"] = true, ["it"] = true, ["to"] = true, ["of"] = true,
+    ["in"] = true, ["for"] = true, ["on"] = true, ["with"] = true,
+    ["as"] = true, ["at"] = true, ["by"] = true, ["or"] = true,
+}
+
+local DICTIONARY_URLS = {
+    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
+    "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt",
+    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt",
+    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words.txt"
+}
+
+local allWords = {}
+local usedWords = {}
+local lastWordTime = 0
+local topWords = {}
+local currentPage = 1
+
+-- UI CREATION 
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "WordSearchPro"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = playerGui
+
+-- Main Frame 
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 340, 0, 440)
+mainFrame.Position = UDim2.new(0.5, -170, 0.5, -220)
+mainFrame.AnchorPoint = Vector2.new(0, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.Parent = mainFrame
+
+-- Drag functionality
+local dragging, dragStart, startPos = false, nil, nil
+
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Search Box
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -20, 0, 40)
+searchBox.Position = UDim2.new(0, 10, 0, 10)
+searchBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+searchBox.BorderSizePixel = 0
+searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+searchBox.PlaceholderText = "Loading"
+searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
+searchBox.Font = Enum.Font.GothamBold
+searchBox.TextSize = 18
+searchBox.ClearTextOnFocus = false
+searchBox.Text = ""
+searchBox.Parent = mainFrame
+
+local searchCorner = Instance.new("UICorner")
+searchCorner.CornerRadius = UDim.new(0, 15)
+searchCorner.Parent = searchBox
+
+-- Button Container
+local btnContainer = Instance.new("Frame")
+btnContainer.Size = UDim2.new(1, -20, 0, 35)
+btnContainer.Position = UDim2.new(0, 10, 0, 58)
+btnContainer.BackgroundTransparency = 1
+btnContainer.Parent = mainFrame
+
+local btnGrid = Instance.new("UIGridLayout")
+btnGrid.CellSize = UDim2.new(0.19, 0, 1, 0)
+btnGrid.CellPadding = UDim2.new(0.0125, 0, 0, 0)
+btnGrid.SortOrder = Enum.SortOrder.LayoutOrder
+btnGrid.Parent = btnContainer
+
+-- Button Creation (Simplified)
+local function createButton(text, color, order)
+    local btn = Instance.new("TextButton")
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    btn.BorderSizePixel = 0
+    btn.TextColor3 = color
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.Text = text
+    btn.LayoutOrder = order
+    btn.Parent = btnContainer
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 15)
+    corner.Parent = btn
+    
+    return btn
+end
+
+local autoTypeButton = createButton("AUTO", Color3.fromRGB(200, 200, 200), 1)
+local bestWordButton = createButton("BEST", Color3.fromRGB(200, 200, 200), 2)
+local longWordButton = createButton("LONG", Color3.fromRGB(200, 200, 200), 3)
+local resetButton = createButton("RESET", Color3.fromRGB(200, 200, 200), 4)
+local settingsButton = createButton("⚙", Color3.fromRGB(200, 200, 200), 5)
+
+-- Results Frame
+local resultsFrame = Instance.new("ScrollingFrame")
+resultsFrame.Size = UDim2.new(1, -20, 1, -108)
+resultsFrame.Position = UDim2.new(0, 10, 0, 101)
+resultsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+resultsFrame.BorderSizePixel = 0
+resultsFrame.ScrollBarThickness = 4
+resultsFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
+resultsFrame.Parent = mainFrame
+
+local resultsCorner = Instance.new("UICorner")
+resultsCorner.CornerRadius = UDim.new(0, 8)
+resultsCorner.Parent = resultsFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 4)
+listLayout.Parent = resultsFrame
+
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingLeft = UDim.new(0, 8)
+listPadding.PaddingRight = UDim.new(0, 8)
+listPadding.PaddingTop = UDim.new(0, 8)
+listPadding.PaddingBottom = UDim.new(0, 8)
+listPadding.Parent = resultsFrame
+
+-- Settings Frame (Simplified)
+local settingsFrame = Instance.new("Frame")
+settingsFrame.Size = UDim2.new(0, 340, 0, 440)
+settingsFrame.Position = UDim2.new(0, 0, 0, 0)
+settingsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+settingsFrame.BorderSizePixel = 0
+settingsFrame.Visible = false
+settingsFrame.Active = true
+settingsFrame.Parent = mainFrame
+
+local settingsCorner = Instance.new("UICorner")
+settingsCorner.CornerRadius = UDim.new(0, 12)
+settingsCorner.Parent = settingsFrame
+
+-- Settings Header
+local settingsTitle = Instance.new("TextLabel")
+settingsTitle.Size = UDim2.new(1, -20, 0, 40)
+settingsTitle.Position = UDim2.new(0, 10, 0, 10)
+settingsTitle.BackgroundTransparency = 1
+settingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+settingsTitle.Font = Enum.Font.GothamBold
+settingsTitle.TextSize = 18
+settingsTitle.Text = "SETTINGS"
+settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+settingsTitle.Parent = settingsFrame
+
+local settingsScroll = Instance.new("ScrollingFrame")
+settingsScroll.Size = UDim2.new(1, -20, 1, -108)
+settingsScroll.Position = UDim2.new(0, 10, 0, 58)
+settingsScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+settingsScroll.BorderSizePixel = 0
+settingsScroll.ScrollBarThickness = 4
+settingsScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
+settingsScroll.Parent = settingsFrame
+
+local settingsScrollCorner = Instance.new("UICorner")
+settingsScrollCorner.CornerRadius = UDim.new(0, 8)
+settingsScrollCorner.Parent = settingsScroll
+
+local settingsLayout = Instance.new("UIListLayout")
+settingsLayout.Padding = UDim.new(0, 6)
+settingsLayout.Parent = settingsScroll
+
+local settingsPadding = Instance.new("UIPadding")
+settingsPadding.PaddingLeft = UDim.new(0, 8)
+settingsPadding.PaddingRight = UDim.new(0, 8)
+settingsPadding.PaddingTop = UDim.new(0, 8)
+settingsPadding.PaddingBottom = UDim.new(0, 8)
+settingsPadding.Parent = settingsScroll
+
+local closeSettingsBtn = Instance.new("TextButton")
+closeSettingsBtn.Size = UDim2.new(1, -20, 0, 38)
+closeSettingsBtn.Position = UDim2.new(0, 10, 1, -48)
+closeSettingsBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+closeSettingsBtn.BorderSizePixel = 0
+closeSettingsBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+closeSettingsBtn.Font = Enum.Font.GothamBold
+closeSettingsBtn.TextSize = 14
+closeSettingsBtn.Text = "CLOSE"
+closeSettingsBtn.Parent = settingsFrame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.Parent = closeSettingsBtn
+
+-- Settings Config Item (Simplified)
+local function createConfigItem(name, configKey, minValue, maxValue, step, suffix)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 55)
+    container.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    container.BorderSizePixel = 0
+    container.Parent = settingsScroll
+    
+    local containerCorner = Instance.new("UICorner")
+    containerCorner.CornerRadius = UDim.new(0, 6)
+    containerCorner.Parent = container
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -16, 0, 25)
+    label.Position = UDim2.new(0, 8, 0, 5)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 12
+    label.Text = name
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    local btnContainer = Instance.new("Frame")
+    btnContainer.Size = UDim2.new(1, -16, 0, 22)
+    btnContainer.Position = UDim2.new(0, 8, 1, -27)
+    btnContainer.BackgroundTransparency = 1
+    btnContainer.Parent = container
+    
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Size = UDim2.new(0, 38, 1, 0)
+    minusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    minusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    minusBtn.Font = Enum.Font.GothamBold
+    minusBtn.TextSize = 16
+    minusBtn.Text = "-"
+    minusBtn.BorderSizePixel = 0
+    minusBtn.Parent = btnContainer
+    
+    local minusCorner = Instance.new("UICorner")
+    minusCorner.CornerRadius = UDim.new(0, 4)
+    minusCorner.Parent = minusBtn
+    
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Size = UDim2.new(1, -84, 1, 0)
+    valueLabel.Position = UDim2.new(0, 42, 0, 0)
+    valueLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    valueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextSize = 12
+    valueLabel.Text = tostring(CONFIG[configKey]) .. (suffix or "")
+    valueLabel.BorderSizePixel = 0
+    valueLabel.Parent = btnContainer
+    
+    local valueCorner = Instance.new("UICorner")
+    valueCorner.CornerRadius = UDim.new(0, 4)
+    valueCorner.Parent = valueLabel
+    
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Size = UDim2.new(0, 38, 1, 0)
+    plusBtn.Position = UDim2.new(1, -38, 0, 0)
+    plusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    plusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    plusBtn.Font = Enum.Font.GothamBold
+    plusBtn.TextSize = 16
+    plusBtn.Text = "+"
+    plusBtn.BorderSizePixel = 0
+    plusBtn.Parent = btnContainer
+    
+    local plusCorner = Instance.new("UICorner")
+    plusCorner.CornerRadius = UDim.new(0, 4)
+    plusCorner.Parent = plusBtn
+    
+    minusBtn.MouseButton1Click:Connect(function()
+        local newValue = CONFIG[configKey] - step
+        if newValue >= minValue then
+            CONFIG[configKey] = newValue
+            valueLabel.Text = tostring(newValue) .. (suffix or "")
+        end
+    end)
+    
+    plusBtn.MouseButton1Click:Connect(function()
+        local newValue = CONFIG[configKey] + step
+        if newValue <= maxValue then
+            CONFIG[configKey] = newValue
+            valueLabel.Text = tostring(newValue) .. (suffix or "")
+        end
+    end)
+end
+
+createConfigItem("Typing Speed", "typingSpeed", 0.05, 0.5, 0.05, "s")
+createConfigItem("Min Length", "minLength", 2, 10, 1)
+createConfigItem("Max Length", "maxLength", 8, 20, 1)
+createConfigItem("Ideal Length", "idealLength", 4, 12, 1)
+createConfigItem("Auto Reset", "autoResetTime", 60, 600, 30, "s")
+createConfigItem("Words/Page", "wordsPerPage", 5, 20, 1)
+
+settingsScroll.CanvasSize = UDim2.new(0, 0, 0, settingsLayout.AbsoluteContentSize.Y + 16)
+
+settingsButton.MouseButton1Click:Connect(function()
+    settingsFrame.Visible = not settingsFrame.Visible
+end)
+
+closeSettingsBtn.MouseButton1Click:Connect(function()
+    settingsFrame.Visible = false
+end)
+
+-- FUNCTIONS
+local function notify(message)
+    task.spawn(function()
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title = "Word Search",
+                Text = message,
+                Duration = 2
+            })
+        end)
+    end)
+end
+
+local function loadFromJSON(content)
+    local success, wordsJson = pcall(function()
+        return HttpService:JSONDecode(content)
+    end)
+    if not success then return false end
+    for word, _ in pairs(wordsJson) do
+        local len = #word
+        if len >= CONFIG.minLength and len <= CONFIG.maxLength and not commonWords[word:lower()] then
+            table.insert(allWords, word:lower())
+        end
+    end
+    return true
+end
+
+local function loadFromText(content)
+    for word in content:gmatch("[^\r\n]+") do
+        local len = #word
+        if len >= CONFIG.minLength and len <= CONFIG.maxLength and not commonWords[word:lower()] then
+            table.insert(allWords, word:lower())
+        end
+    end
+    return #allWords > 0
+end
+
+local function loadDictionary()
+    notify("Loading dictionary...")
+    for _, url in ipairs(DICTIONARY_URLS) do
+        local ok, content = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if ok then
+            local loaded = content:match("^%s*{") and loadFromJSON(content) or loadFromText(content)
+            if loaded then
+                searchBox.PlaceholderText = "Type to search words"
+                notify("Loaded " .. #allWords .. " words")
+                return true
+            end
+        end
+    end
+    searchBox.PlaceholderText = "Load failed"
+    notify("Failed to load")
+    return false
+end
+
+local function createWordLabel(text)
+    local lbl = Instance.new("TextButton")
+    lbl.Size = UDim2.new(1, 0, 0, 32)
+    lbl.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    lbl.BorderSizePixel = 0
+    lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+    lbl.Font = Enum.Font.GothamMedium
+    lbl.TextSize = 15
+    lbl.Text = text:upper()
+    lbl.Parent = resultsFrame
+    
+    local lblCorner = Instance.new("UICorner")
+    lblCorner.CornerRadius = UDim.new(0, 6)
+    lblCorner.Parent = lbl
+    
+    return lbl
+end
+
+local function autoTypeWord(word, currentInput)
+    if not CONFIG.autoType then return end
+    local remaining = word:sub(#currentInput + 1)
+    task.spawn(function()
+        local cam = workspace.CurrentCamera
+        local size = cam.ViewportSize
+        local x, y = size.X/2, size.Y/2
+        for _ = 1,3 do
+            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+            task.wait(0.05)
+        end
+        for c in remaining:upper():gmatch(".") do
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[c], false, game)
+            task.wait(CONFIG.typingSpeed)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[c], false, game)
+        end
+        task.wait(0.15)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+    end)
+end
+
+local function displayPage()
+    for _, c in ipairs(resultsFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+    local startIdx = (currentPage-1)*CONFIG.wordsPerPage + 1
+    local endIdx = math.min(currentPage*CONFIG.wordsPerPage, #topWords)
+    for i = startIdx, endIdx do
+        local word = topWords[i]
+        local lbl = createWordLabel(word)
+        lbl.MouseButton1Click:Connect(function()
+            if word then
+                usedWords[word] = true
+                notify(word:upper())
+                autoTypeWord(word, searchBox.Text)
+                searchBox.Text = ""
+            end
+        end)
+    end
+    resultsFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 16)
+end
+
+local function updateTopWords(input)
+    topWords = {}
+    input = input:lower()
+    if input == "" then
+        for _, c in ipairs(resultsFrame:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+        return
+    end
+    for _, w in ipairs(allWords) do
+        if w:sub(1, #input) == input and w ~= input and not usedWords[w] then
+            table.insert(topWords, w)
+        end
+    end
+    
+    if CONFIG.useBestWord then
+        table.sort(topWords, function(a, b)
+            local lenA, lenB = #a, #b
+            local distA = math.abs(lenA - CONFIG.idealLength)
+            local distB = math.abs(lenB - CONFIG.idealLength)
+            if distA == distB then
+                return lenA == lenB and a < b or lenA < lenB
+            end
+            return distA < distB
+        end)
+    else
+        table.sort(topWords, function(a, b) return a < b end)
+    end
+    
+    currentPage = 1
+    displayPage()
+end
+
+autoTypeButton.MouseButton1Click:Connect(function()
+    CONFIG.autoType = not CONFIG.autoType
+    if CONFIG.autoType then
+        autoTypeButton.TextColor3 = Color3.fromRGB(100, 255, 100)
+        notify("Auto-type ON")
+    else
+        autoTypeButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        notify("Auto-type OFF")
+    end
+end)
+
+bestWordButton.MouseButton1Click:Connect(function()
+    CONFIG.useBestWord = not CONFIG.useBestWord
+    if CONFIG.useBestWord then
+        bestWordButton.TextColor3 = Color3.fromRGB(255, 215, 0)
+        notify("Best word ON")
+    else
+        bestWordButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        notify("Best word OFF")
+    end
+    updateTopWords(searchBox.Text)
+end)
+
+longWordButton.MouseButton1Click:Connect(function()
+    if searchBox.Text == "" then
+        notify("Type letters first!")
+        return
+    end
+    local input = searchBox.Text:lower()
+    local longWords = {}
+    for _, w in ipairs(allWords) do
+        if w:sub(1, #input) == input and not usedWords[w] and #w >= 7 then
+            table.insert(longWords, w)
+        end
+    end
+    if #longWords == 0 then
+        notify("No long words!")
+        return
+    end
+    table.sort(longWords, function(a, b) return #a > #b end)
+    local longestWord = longWords[1]
+    usedWords[longestWord] = true
+    notify(longestWord:upper())
+    autoTypeWord(longestWord, searchBox.Text)
+    searchBox.Text = ""
+end)
+
+resetButton.MouseButton1Click:Connect(function()
+    usedWords = {}
+    lastWordTime = 0
+    notify("Reset complete!")
+end)
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    updateTopWords(searchBox.Text)
+end)
+
+local function extractLetters(message)
+    local pattern = "Word:%s*([A-Z][A-Z]?[A-Z]?[A-Z]?[A-Z]?)"
+    return string.match(message, pattern)
+end
+
+LogService.MessageOut:Connect(function(message, messageType)
+    if string.find(message, "Word:") then
+        local letters = extractLetters(message)
+        if letters then
+            lastWordTime = tick()
+            searchBox.Text = letters
+            notify(letters .. " detected!")
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(10) do
+        if lastWordTime > 0 and tick() - lastWordTime > CONFIG.autoResetTime then
+            usedWords = {}
+            lastWordTime = 0
+            notify("Auto-reset!")
+        end
+    end
+end)
+
+task.spawn(function()
+    if loadDictionary() then
+        notify("Dictionary ready!")
+    end
+end)
