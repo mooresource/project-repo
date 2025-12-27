@@ -30,8 +30,8 @@ local commonWords = {
 }
 
 local DICTIONARY_URLS = {
-    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/words.txt"
-	"https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
+    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/words.txt",
+    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
 }
 
 local allWords = {}
