@@ -15,9 +15,11 @@ local CONFIG = {
     maxLength = 15,
     idealLength = 6,
     autoResetTime = 300,
-    wordsPerPage = 12,
+    wordsPerPage = 10,
     autoType = false,
-    useBestWord = false
+    useBestWord = false,
+    preferLongest = false,
+    preferComplicated = false
 }
 
 local commonWords = {
@@ -28,10 +30,8 @@ local commonWords = {
 }
 
 local DICTIONARY_URLS = {
-    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
-    "https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-usa-no-swears.txt",
-    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt",
-    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words.txt"
+    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/words.txt"
+	"https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
 }
 
 local allWords = {}
@@ -40,17 +40,17 @@ local lastWordTime = 0
 local topWords = {}
 local currentPage = 1
 
--- UI CREATION 
+-- UI CREATION (SMALLER SIZE)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "WordSearchPro"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
--- Main Frame 
+-- Main Frame (Reduced from 340x440 to 280x360)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 340, 0, 440)
-mainFrame.Position = UDim2.new(0.5, -170, 0.5, -220)
+mainFrame.Size = UDim2.new(0, 280, 0, 360)
+mainFrame.Position = UDim2.new(0.5, -140, 0.5, -180)
 mainFrame.AnchorPoint = Vector2.new(0, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 mainFrame.BorderSizePixel = 0
@@ -58,7 +58,7 @@ mainFrame.Active = true
 mainFrame.Parent = screenGui
 
 local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.CornerRadius = UDim.new(0, 10)
 mainCorner.Parent = mainFrame
 
 -- Drag functionality
@@ -85,29 +85,29 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Search Box
+-- Search Box (Smaller)
 local searchBox = Instance.new("TextBox")
-searchBox.Size = UDim2.new(1, -20, 0, 40)
-searchBox.Position = UDim2.new(0, 10, 0, 10)
+searchBox.Size = UDim2.new(1, -16, 0, 32)
+searchBox.Position = UDim2.new(0, 8, 0, 8)
 searchBox.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 searchBox.BorderSizePixel = 0
 searchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 searchBox.PlaceholderText = "Loading"
 searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 130)
 searchBox.Font = Enum.Font.GothamBold
-searchBox.TextSize = 18
+searchBox.TextSize = 15
 searchBox.ClearTextOnFocus = false
 searchBox.Text = ""
 searchBox.Parent = mainFrame
 
 local searchCorner = Instance.new("UICorner")
-searchCorner.CornerRadius = UDim.new(0, 15)
+searchCorner.CornerRadius = UDim.new(0, 8)
 searchCorner.Parent = searchBox
 
--- Button Container
+-- Button Container (Smaller)
 local btnContainer = Instance.new("Frame")
-btnContainer.Size = UDim2.new(1, -20, 0, 35)
-btnContainer.Position = UDim2.new(0, 10, 0, 58)
+btnContainer.Size = UDim2.new(1, -16, 0, 28)
+btnContainer.Position = UDim2.new(0, 8, 0, 46)
 btnContainer.BackgroundTransparency = 1
 btnContainer.Parent = mainFrame
 
@@ -117,20 +117,20 @@ btnGrid.CellPadding = UDim2.new(0.0125, 0, 0, 0)
 btnGrid.SortOrder = Enum.SortOrder.LayoutOrder
 btnGrid.Parent = btnContainer
 
--- Button Creation (Simplified)
+-- Button Creation
 local function createButton(text, color, order)
     local btn = Instance.new("TextButton")
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     btn.BorderSizePixel = 0
     btn.TextColor3 = color
     btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 11
+    btn.TextSize = 10
     btn.Text = text
     btn.LayoutOrder = order
     btn.Parent = btnContainer
     
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 15)
+    corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
     
     return btn
@@ -139,37 +139,37 @@ end
 local autoTypeButton = createButton("AUTO", Color3.fromRGB(200, 200, 200), 1)
 local bestWordButton = createButton("BEST", Color3.fromRGB(200, 200, 200), 2)
 local longWordButton = createButton("LONG", Color3.fromRGB(200, 200, 200), 3)
-local resetButton = createButton("RESET", Color3.fromRGB(200, 200, 200), 4)
+local resetButton = createButton("RST", Color3.fromRGB(200, 200, 200), 4)
 local settingsButton = createButton("⚙", Color3.fromRGB(200, 200, 200), 5)
 
--- Results Frame
+-- Results Frame (Smaller)
 local resultsFrame = Instance.new("ScrollingFrame")
-resultsFrame.Size = UDim2.new(1, -20, 1, -108)
-resultsFrame.Position = UDim2.new(0, 10, 0, 101)
+resultsFrame.Size = UDim2.new(1, -16, 1, -86)
+resultsFrame.Position = UDim2.new(0, 8, 0, 78)
 resultsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 resultsFrame.BorderSizePixel = 0
-resultsFrame.ScrollBarThickness = 4
+resultsFrame.ScrollBarThickness = 3
 resultsFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
 resultsFrame.Parent = mainFrame
 
 local resultsCorner = Instance.new("UICorner")
-resultsCorner.CornerRadius = UDim.new(0, 8)
+resultsCorner.CornerRadius = UDim.new(0, 6)
 resultsCorner.Parent = resultsFrame
 
 local listLayout = Instance.new("UIListLayout")
-listLayout.Padding = UDim.new(0, 4)
+listLayout.Padding = UDim.new(0, 3)
 listLayout.Parent = resultsFrame
 
 local listPadding = Instance.new("UIPadding")
-listPadding.PaddingLeft = UDim.new(0, 8)
-listPadding.PaddingRight = UDim.new(0, 8)
-listPadding.PaddingTop = UDim.new(0, 8)
-listPadding.PaddingBottom = UDim.new(0, 8)
+listPadding.PaddingLeft = UDim.new(0, 6)
+listPadding.PaddingRight = UDim.new(0, 6)
+listPadding.PaddingTop = UDim.new(0, 6)
+listPadding.PaddingBottom = UDim.new(0, 6)
 listPadding.Parent = resultsFrame
 
--- Settings Frame (Simplified)
+-- Settings Frame (Smaller)
 local settingsFrame = Instance.new("Frame")
-settingsFrame.Size = UDim2.new(0, 340, 0, 440)
+settingsFrame.Size = UDim2.new(0, 280, 0, 360)
 settingsFrame.Position = UDim2.new(0, 0, 0, 0)
 settingsFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 settingsFrame.BorderSizePixel = 0
@@ -178,95 +178,95 @@ settingsFrame.Active = true
 settingsFrame.Parent = mainFrame
 
 local settingsCorner = Instance.new("UICorner")
-settingsCorner.CornerRadius = UDim.new(0, 12)
+settingsCorner.CornerRadius = UDim.new(0, 10)
 settingsCorner.Parent = settingsFrame
 
 -- Settings Header
 local settingsTitle = Instance.new("TextLabel")
-settingsTitle.Size = UDim2.new(1, -20, 0, 40)
-settingsTitle.Position = UDim2.new(0, 10, 0, 10)
+settingsTitle.Size = UDim2.new(1, -16, 0, 32)
+settingsTitle.Position = UDim2.new(0, 8, 0, 8)
 settingsTitle.BackgroundTransparency = 1
 settingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 settingsTitle.Font = Enum.Font.GothamBold
-settingsTitle.TextSize = 18
+settingsTitle.TextSize = 16
 settingsTitle.Text = "SETTINGS"
 settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
 settingsTitle.Parent = settingsFrame
 
 local settingsScroll = Instance.new("ScrollingFrame")
-settingsScroll.Size = UDim2.new(1, -20, 1, -108)
-settingsScroll.Position = UDim2.new(0, 10, 0, 58)
+settingsScroll.Size = UDim2.new(1, -16, 1, -86)
+settingsScroll.Position = UDim2.new(0, 8, 0, 46)
 settingsScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 settingsScroll.BorderSizePixel = 0
-settingsScroll.ScrollBarThickness = 4
+settingsScroll.ScrollBarThickness = 3
 settingsScroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
 settingsScroll.Parent = settingsFrame
 
 local settingsScrollCorner = Instance.new("UICorner")
-settingsScrollCorner.CornerRadius = UDim.new(0, 8)
+settingsScrollCorner.CornerRadius = UDim.new(0, 6)
 settingsScrollCorner.Parent = settingsScroll
 
 local settingsLayout = Instance.new("UIListLayout")
-settingsLayout.Padding = UDim.new(0, 6)
+settingsLayout.Padding = UDim.new(0, 5)
 settingsLayout.Parent = settingsScroll
 
 local settingsPadding = Instance.new("UIPadding")
-settingsPadding.PaddingLeft = UDim.new(0, 8)
-settingsPadding.PaddingRight = UDim.new(0, 8)
-settingsPadding.PaddingTop = UDim.new(0, 8)
-settingsPadding.PaddingBottom = UDim.new(0, 8)
+settingsPadding.PaddingLeft = UDim.new(0, 6)
+settingsPadding.PaddingRight = UDim.new(0, 6)
+settingsPadding.PaddingTop = UDim.new(0, 6)
+settingsPadding.PaddingBottom = UDim.new(0, 6)
 settingsPadding.Parent = settingsScroll
 
 local closeSettingsBtn = Instance.new("TextButton")
-closeSettingsBtn.Size = UDim2.new(1, -20, 0, 38)
-closeSettingsBtn.Position = UDim2.new(0, 10, 1, -48)
+closeSettingsBtn.Size = UDim2.new(1, -16, 0, 32)
+closeSettingsBtn.Position = UDim2.new(0, 8, 1, -40)
 closeSettingsBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 closeSettingsBtn.BorderSizePixel = 0
 closeSettingsBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 closeSettingsBtn.Font = Enum.Font.GothamBold
-closeSettingsBtn.TextSize = 14
+closeSettingsBtn.TextSize = 12
 closeSettingsBtn.Text = "CLOSE"
 closeSettingsBtn.Parent = settingsFrame
 
 local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.CornerRadius = UDim.new(0, 6)
 closeCorner.Parent = closeSettingsBtn
 
--- Settings Config Item (Simplified)
+-- Settings Config Item
 local function createConfigItem(name, configKey, minValue, maxValue, step, suffix)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 55)
+    container.Size = UDim2.new(1, 0, 0, 48)
     container.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
     container.BorderSizePixel = 0
     container.Parent = settingsScroll
     
     local containerCorner = Instance.new("UICorner")
-    containerCorner.CornerRadius = UDim.new(0, 6)
+    containerCorner.CornerRadius = UDim.new(0, 5)
     containerCorner.Parent = container
     
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -16, 0, 25)
-    label.Position = UDim2.new(0, 8, 0, 5)
+    label.Size = UDim2.new(1, -12, 0, 20)
+    label.Position = UDim2.new(0, 6, 0, 4)
     label.BackgroundTransparency = 1
     label.TextColor3 = Color3.fromRGB(200, 200, 200)
     label.Font = Enum.Font.GothamMedium
-    label.TextSize = 12
+    label.TextSize = 11
     label.Text = name
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = container
     
     local btnContainer = Instance.new("Frame")
-    btnContainer.Size = UDim2.new(1, -16, 0, 22)
-    btnContainer.Position = UDim2.new(0, 8, 1, -27)
+    btnContainer.Size = UDim2.new(1, -12, 0, 20)
+    btnContainer.Position = UDim2.new(0, 6, 1, -24)
     btnContainer.BackgroundTransparency = 1
     btnContainer.Parent = container
     
     local minusBtn = Instance.new("TextButton")
-    minusBtn.Size = UDim2.new(0, 38, 1, 0)
+    minusBtn.Size = UDim2.new(0, 32, 1, 0)
     minusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
     minusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     minusBtn.Font = Enum.Font.GothamBold
-    minusBtn.TextSize = 16
+    minusBtn.TextSize = 14
     minusBtn.Text = "-"
     minusBtn.BorderSizePixel = 0
     minusBtn.Parent = btnContainer
@@ -276,12 +276,12 @@ local function createConfigItem(name, configKey, minValue, maxValue, step, suffi
     minusCorner.Parent = minusBtn
     
     local valueLabel = Instance.new("TextLabel")
-    valueLabel.Size = UDim2.new(1, -84, 1, 0)
-    valueLabel.Position = UDim2.new(0, 42, 0, 0)
+    valueLabel.Size = UDim2.new(1, -70, 1, 0)
+    valueLabel.Position = UDim2.new(0, 35, 0, 0)
     valueLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     valueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextSize = 12
+    valueLabel.TextSize = 11
     valueLabel.Text = tostring(CONFIG[configKey]) .. (suffix or "")
     valueLabel.BorderSizePixel = 0
     valueLabel.Parent = btnContainer
@@ -291,12 +291,12 @@ local function createConfigItem(name, configKey, minValue, maxValue, step, suffi
     valueCorner.Parent = valueLabel
     
     local plusBtn = Instance.new("TextButton")
-    plusBtn.Size = UDim2.new(0, 38, 1, 0)
-    plusBtn.Position = UDim2.new(1, -38, 0, 0)
+    plusBtn.Size = UDim2.new(0, 32, 1, 0)
+    plusBtn.Position = UDim2.new(1, -32, 0, 0)
     plusBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
     plusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     plusBtn.Font = Enum.Font.GothamBold
-    plusBtn.TextSize = 16
+    plusBtn.TextSize = 14
     plusBtn.Text = "+"
     plusBtn.BorderSizePixel = 0
     plusBtn.Parent = btnContainer
@@ -322,14 +322,63 @@ local function createConfigItem(name, configKey, minValue, maxValue, step, suffi
     end)
 end
 
+-- Toggle Setting Item for boolean configs
+local function createToggleItem(name, configKey, description)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 48)
+    container.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    container.BorderSizePixel = 0
+    container.Parent = settingsScroll
+    
+    local containerCorner = Instance.new("UICorner")
+    containerCorner.CornerRadius = UDim.new(0, 5)
+    containerCorner.Parent = container
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -52, 0, 44)
+    label.Position = UDim2.new(0, 6, 0, 2)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 11
+    label.Text = name .. "\n" .. description
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Top
+    label.Parent = container
+    
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 40, 0, 20)
+    toggleBtn.Position = UDim2.new(1, -46, 0.5, -10)
+    toggleBtn.BackgroundColor3 = CONFIG[configKey] and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(60, 60, 70)
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.Text = CONFIG[configKey] and "ON" or "OFF"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextSize = 9
+    toggleBtn.Parent = container
+    
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 10)
+    toggleCorner.Parent = toggleBtn
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        CONFIG[configKey] = not CONFIG[configKey]
+        toggleBtn.Text = CONFIG[configKey] and "ON" or "OFF"
+        toggleBtn.BackgroundColor3 = CONFIG[configKey] and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(60, 60, 70)
+        updateTopWords(searchBox.Text)
+    end)
+end
+
 createConfigItem("Typing Speed", "typingSpeed", 0.05, 0.5, 0.05, "s")
 createConfigItem("Min Length", "minLength", 2, 10, 1)
 createConfigItem("Max Length", "maxLength", 8, 20, 1)
 createConfigItem("Ideal Length", "idealLength", 4, 12, 1)
 createConfigItem("Auto Reset", "autoResetTime", 60, 600, 30, "s")
 createConfigItem("Words/Page", "wordsPerPage", 5, 20, 1)
+createToggleItem("Prefer Longest", "preferLongest", "Prioritize longest words")
+createToggleItem("Prefer Complex", "preferComplicated", "Show complex words first")
 
-settingsScroll.CanvasSize = UDim2.new(0, 0, 0, settingsLayout.AbsoluteContentSize.Y + 16)
+settingsScroll.CanvasSize = UDim2.new(0, 0, 0, settingsLayout.AbsoluteContentSize.Y + 12)
 
 settingsButton.MouseButton1Click:Connect(function()
     settingsFrame.Visible = not settingsFrame.Visible
@@ -398,17 +447,17 @@ end
 
 local function createWordLabel(text)
     local lbl = Instance.new("TextButton")
-    lbl.Size = UDim2.new(1, 0, 0, 32)
+    lbl.Size = UDim2.new(1, 0, 0, 26)
     lbl.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     lbl.BorderSizePixel = 0
     lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
     lbl.Font = Enum.Font.GothamMedium
-    lbl.TextSize = 15
+    lbl.TextSize = 13
     lbl.Text = text:upper()
     lbl.Parent = resultsFrame
     
     local lblCorner = Instance.new("UICorner")
-    lblCorner.CornerRadius = UDim.new(0, 6)
+    lblCorner.CornerRadius = UDim.new(0, 5)
     lblCorner.Parent = lbl
     
     return lbl
@@ -456,7 +505,32 @@ local function displayPage()
             end
         end)
     end
-    resultsFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 16)
+    resultsFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 12)
+end
+
+-- Calculate word complexity (unique letters and uncommon letter patterns)
+local function calculateComplexity(word)
+    local uniqueLetters = {}
+    local complexity = 0
+    
+    -- Count unique letters
+    for char in word:gmatch(".") do
+        if not uniqueLetters[char] then
+            uniqueLetters[char] = true
+            complexity = complexity + 1
+        end
+    end
+    
+    -- Bonus for uncommon letters
+    local uncommonLetters = {q=3, z=3, x=3, j=2, k=2, v=2, w=2, y=2}
+    for char in word:gmatch(".") do
+        complexity = complexity + (uncommonLetters[char] or 0)
+    end
+    
+    -- Bonus for longer words
+    complexity = complexity + (#word * 0.5)
+    
+    return complexity
 end
 
 local function updateTopWords(input)
@@ -474,7 +548,20 @@ local function updateTopWords(input)
         end
     end
     
-    if CONFIG.useBestWord then
+    -- Apply sorting based on preferences
+    if CONFIG.preferLongest then
+        table.sort(topWords, function(a, b)
+            if #a == #b then return a < b end
+            return #a > #b
+        end)
+    elseif CONFIG.preferComplicated then
+        table.sort(topWords, function(a, b)
+            local compA = calculateComplexity(a)
+            local compB = calculateComplexity(b)
+            if compA == compB then return a < b end
+            return compA > compB
+        end)
+    elseif CONFIG.useBestWord then
         table.sort(topWords, function(a, b)
             local lenA, lenB = #a, #b
             local distA = math.abs(lenA - CONFIG.idealLength)
