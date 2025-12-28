@@ -12,7 +12,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local CONFIG = {
     typingSpeed = 0.15,
     minLength = 3,
-    maxLength = 15,
+    maxLength = 30,
     idealLength = 6,
     autoResetTime = 300,
     wordsPerPage = 10,
@@ -30,7 +30,7 @@ local commonWords = {
 }
 
 local DICTIONARY_URLS = {
-    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/words.txt",
+    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
     "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
 }
 
@@ -40,14 +40,12 @@ local lastWordTime = 0
 local topWords = {}
 local currentPage = 1
 
--- UI CREATION (SMALLER SIZE)
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "WordSearchPro"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
--- Main Frame (Reduced from 340x440 to 280x360)
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 280, 0, 360)
 mainFrame.Position = UDim2.new(0.5, -140, 0.5, -180)
@@ -58,34 +56,66 @@ mainFrame.Active = true
 mainFrame.Parent = screenGui
 
 local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.CornerRadius = UDim.new(0, 15)
 mainCorner.Parent = mainFrame
 
--- Drag functionality
-local dragging, dragStart, startPos = false, nil, nil
+local dragging = false
+local dragInput = nil
+local dragStart = nil
+local startPos = nil
+
+local function updateInput(input)
+    if dragging then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, 
+            startPos.X.Offset + delta.X, 
+            startPos.Y.Scale, 
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end
 
 mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
+        dragInput = input
         dragStart = input.Position
         startPos = mainFrame.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
+mainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        if dragging and input == dragInput then
+            updateInput(input)
+        end
     end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    if dragging and input == dragInput then
+        if input.UserInputType == Enum.UserInputType.MouseMovement or 
+           input.UserInputType == Enum.UserInputType.Touch then
+            updateInput(input)
+        end
     end
 end)
 
--- Search Box (Smaller)
+UserInputService.InputEnded:Connect(function(input)
+    if input == dragInput then
+        dragging = false
+    end
+end)
+
 local searchBox = Instance.new("TextBox")
 searchBox.Size = UDim2.new(1, -16, 0, 32)
 searchBox.Position = UDim2.new(0, 8, 0, 8)
@@ -101,10 +131,9 @@ searchBox.Text = ""
 searchBox.Parent = mainFrame
 
 local searchCorner = Instance.new("UICorner")
-searchCorner.CornerRadius = UDim.new(0, 8)
+searchCorner.CornerRadius = UDim.new(0, 15)
 searchCorner.Parent = searchBox
 
--- Button Container (Smaller)
 local btnContainer = Instance.new("Frame")
 btnContainer.Size = UDim2.new(1, -16, 0, 28)
 btnContainer.Position = UDim2.new(0, 8, 0, 46)
@@ -117,7 +146,6 @@ btnGrid.CellPadding = UDim2.new(0.0125, 0, 0, 0)
 btnGrid.SortOrder = Enum.SortOrder.LayoutOrder
 btnGrid.Parent = btnContainer
 
--- Button Creation
 local function createButton(text, color, order)
     local btn = Instance.new("TextButton")
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
@@ -142,7 +170,6 @@ local longWordButton = createButton("LONG", Color3.fromRGB(200, 200, 200), 3)
 local resetButton = createButton("RST", Color3.fromRGB(200, 200, 200), 4)
 local settingsButton = createButton("⚙", Color3.fromRGB(200, 200, 200), 5)
 
--- Results Frame (Smaller)
 local resultsFrame = Instance.new("ScrollingFrame")
 resultsFrame.Size = UDim2.new(1, -16, 1, -86)
 resultsFrame.Position = UDim2.new(0, 8, 0, 78)
@@ -167,7 +194,6 @@ listPadding.PaddingTop = UDim.new(0, 6)
 listPadding.PaddingBottom = UDim.new(0, 6)
 listPadding.Parent = resultsFrame
 
--- Settings Frame (Smaller)
 local settingsFrame = Instance.new("Frame")
 settingsFrame.Size = UDim2.new(0, 280, 0, 360)
 settingsFrame.Position = UDim2.new(0, 0, 0, 0)
@@ -181,7 +207,6 @@ local settingsCorner = Instance.new("UICorner")
 settingsCorner.CornerRadius = UDim.new(0, 10)
 settingsCorner.Parent = settingsFrame
 
--- Settings Header
 local settingsTitle = Instance.new("TextLabel")
 settingsTitle.Size = UDim2.new(1, -16, 0, 32)
 settingsTitle.Position = UDim2.new(0, 8, 0, 8)
@@ -232,7 +257,6 @@ local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 6)
 closeCorner.Parent = closeSettingsBtn
 
--- Settings Config Item
 local function createConfigItem(name, configKey, minValue, maxValue, step, suffix)
     local container = Instance.new("Frame")
     container.Size = UDim2.new(1, 0, 0, 48)
@@ -322,7 +346,6 @@ local function createConfigItem(name, configKey, minValue, maxValue, step, suffi
     end)
 end
 
--- Toggle Setting Item for boolean configs
 local function createToggleItem(name, configKey, description)
     local container = Instance.new("Frame")
     container.Size = UDim2.new(1, 0, 0, 48)
@@ -371,9 +394,9 @@ end
 
 createConfigItem("Typing Speed", "typingSpeed", 0.05, 0.5, 0.05, "s")
 createConfigItem("Min Length", "minLength", 2, 10, 1)
-createConfigItem("Max Length", "maxLength", 8, 20, 1)
-createConfigItem("Ideal Length", "idealLength", 4, 12, 1)
-createConfigItem("Auto Reset", "autoResetTime", 60, 600, 30, "s")
+createConfigItem("Max Length", "maxLength", 8, 100, 1)
+createConfigItem("Ideal Length", "idealLength", 4, 100, 1)
+createConfigItem("Auto Reset", "autoResetTime", 60, 1000, 30, "s")
 createConfigItem("Words/Page", "wordsPerPage", 5, 20, 1)
 createToggleItem("Prefer Longest", "preferLongest", "Prioritize longest words")
 createToggleItem("Prefer Complex", "preferComplicated", "Show complex words first")
@@ -388,7 +411,6 @@ closeSettingsBtn.MouseButton1Click:Connect(function()
     settingsFrame.Visible = false
 end)
 
--- FUNCTIONS
 local function notify(message)
     task.spawn(function()
         pcall(function()
@@ -427,22 +449,38 @@ end
 
 local function loadDictionary()
     notify("Loading dictionary...")
-    for _, url in ipairs(DICTIONARY_URLS) do
+    for i, url in ipairs(DICTIONARY_URLS) do
         local ok, content = pcall(function()
             return game:HttpGet(url)
         end)
-        if ok then
-            local loaded = content:match("^%s*{") and loadFromJSON(content) or loadFromText(content)
-            if loaded then
-                searchBox.PlaceholderText = "Type to search words"
-                notify("Loaded " .. #allWords .. " words")
-                return true
+        if ok and content then
+            local loaded = false
+            
+            if i == 1 and content:match("^%s*{") then
+                loaded = loadFromJSON(content)
             end
+            
+            if not loaded then
+                loaded = loadFromText(content)
+            end
+            
+            if loaded then
+                notify("Loaded from URL " .. i .. ": " .. #allWords .. " words")
+            end
+        else
+            notify("Failed to load URL " .. i)
         end
     end
-    searchBox.PlaceholderText = "Load failed"
-    notify("Failed to load")
-    return false
+    
+    if #allWords > 0 then
+        searchBox.PlaceholderText = "Type to search words"
+        notify("Total: " .. #allWords .. " words")
+        return true
+    else
+        searchBox.PlaceholderText = "Load failed"
+        notify("Failed to load")
+        return false
+    end
 end
 
 local function createWordLabel(text)
@@ -508,12 +546,10 @@ local function displayPage()
     resultsFrame.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 12)
 end
 
--- Calculate word complexity (unique letters and uncommon letter patterns)
 local function calculateComplexity(word)
     local uniqueLetters = {}
     local complexity = 0
     
-    -- Count unique letters
     for char in word:gmatch(".") do
         if not uniqueLetters[char] then
             uniqueLetters[char] = true
@@ -521,13 +557,11 @@ local function calculateComplexity(word)
         end
     end
     
-    -- Bonus for uncommon letters
     local uncommonLetters = {q=3, z=3, x=3, j=2, k=2, v=2, w=2, y=2}
     for char in word:gmatch(".") do
         complexity = complexity + (uncommonLetters[char] or 0)
     end
     
-    -- Bonus for longer words
     complexity = complexity + (#word * 0.5)
     
     return complexity
@@ -548,7 +582,6 @@ local function updateTopWords(input)
         end
     end
     
-    -- Apply sorting based on preferences
     if CONFIG.preferLongest then
         table.sort(topWords, function(a, b)
             if #a == #b then return a < b end
