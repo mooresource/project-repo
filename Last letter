@@ -1,164 +1,140 @@
 local Players = game:GetService("Players")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local UserInputService = game:GetService("UserInputService")
-local StarterGui = game:GetService("StarterGui")
 local LogService = game:GetService("LogService")
 local HttpService = game:GetService("HttpService")
-local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Platform Detection
-local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-local isPC = UserInputService.KeyboardEnabled and UserInputService.MouseEnabled
-
 local CONFIG = {
-	typingSpeed = 0.15,
-	minLength = 3,
-	maxLength = 45,
-	idealLength = 40,
-	autoResetTime = 300,
-	wordsPerPage = 8,
+    typingSpeed = 0.15,
+    minLength = 3,
+    maxLength = 45,
+    idealLength = 40,
+    autoResetTime = 300,
+    wordsPerPage = 8,
+    turnSettlingTime = 0.15,
+    autoPlayDelay = 0.3,
+    wrongAnswerCheckDelay = 0.8,
+    backspaceDelay = 0.4,
 }
 
 local commonWords = {
-	["a"] = true, ["an"] = true, ["the"] = true, ["and"] = true, ["but"] = true, 
-	["or"] = true, ["nor"] = true, ["for"] = true, ["yet"] = true, ["so"] = true,
-	["in"] = true, ["on"] = true, ["at"] = true, ["to"] = true, ["of"] = true, 
-	["by"] = true, ["with"] = true, ["from"] = true, ["up"] = true, ["about"] = true, 
-	["into"] = true, ["through"] = true, ["after"] = true, ["over"] = true, ["between"] = true,
-	["out"] = true, ["against"] = true, ["during"] = true, ["without"] = true, ["before"] = true,
-	["under"] = true, ["around"] = true, ["among"] = true, ["i"] = true, ["you"] = true, 
-	["he"] = true, ["she"] = true, ["it"] = true, ["we"] = true, ["they"] = true, 
-	["me"] = true, ["him"] = true, ["her"] = true, ["us"] = true, ["them"] = true,
-	["my"] = true, ["your"] = true, ["his"] = true, ["its"] = true, ["our"] = true, 
-	["their"] = true, ["mine"] = true, ["yours"] = true, ["hers"] = true, ["ours"] = true,
-	["theirs"] = true, ["this"] = true, ["that"] = true, ["these"] = true, ["those"] = true,
-	["who"] = true, ["what"] = true, ["which"] = true, ["whom"] = true, ["whose"] = true,
-	["is"] = true, ["am"] = true, ["are"] = true, ["was"] = true, ["were"] = true, 
-	["be"] = true, ["been"] = true, ["being"] = true, ["have"] = true, ["has"] = true,
-	["had"] = true, ["having"] = true, ["do"] = true, ["does"] = true, ["did"] = true,
-	["done"] = true, ["doing"] = true, ["will"] = true, ["would"] = true, ["could"] = true,
-	["should"] = true, ["may"] = true, ["might"] = true, ["must"] = true, ["can"] = true,
-	["shall"] = true, ["as"] = true, ["if"] = true, ["than"] = true, ["then"] = true,
-	["now"] = true, ["just"] = true, ["where"] = true, ["when"] = true, ["why"] = true,
-	["how"] = true, ["all"] = true, ["each"] = true, ["some"] = true, ["any"] = true,
-	["many"] = true, ["much"] = true, ["more"] = true, ["most"] = true, ["other"] = true,
-	["such"] = true, ["no"] = true, ["not"] = true, ["only"] = true, ["own"] = true,
-	["same"] = true, ["too"] = true, ["very"] = true, ["yes"] = true, ["get"] = true,
-	["got"] = true, ["go"] = true, ["gone"] = true, ["went"] = true, ["make"] = true,
-	["made"] = true, ["see"] = true, ["saw"] = true, ["seen"] = true, ["come"] = true,
-	["came"] = true, ["take"] = true, ["took"] = true, ["know"] = true, ["knew"] = true,
-	["known"] = true, ["say"] = true, ["said"] = true, ["think"] = true, ["thought"] = true,
-	["look"] = true, ["looked"] = true, ["want"] = true, ["wanted"] = true, ["use"] = true,
-	["used"] = true, ["find"] = true, ["found"] = true, ["give"] = true, ["gave"] = true,
-	["given"] = true, ["tell"] = true, ["told"] = true, ["work"] = true, ["worked"] = true,
-	["call"] = true, ["called"] = true, ["try"] = true, ["tried"] = true, ["ask"] = true,
-	["asked"] = true, ["need"] = true, ["needed"] = true, ["feel"] = true, ["felt"] = true,
-	["become"] = true, ["became"] = true, ["leave"] = true, ["left"] = true, ["put"] = true,
-	["mean"] = true, ["meant"] = true, ["keep"] = true, ["kept"] = true, ["let"] = true,
-	["begin"] = true, ["began"] = true, ["seem"] = true, ["seemed"] = true, ["help"] = true,
-	["helped"] = true, ["show"] = true, ["showed"] = true, ["shown"] = true, ["hear"] = true,
-	["heard"] = true, ["play"] = true, ["played"] = true, ["run"] = true, ["ran"] = true,
-	["move"] = true, ["moved"] = true, ["like"] = true, ["liked"] = true, ["live"] = true,
-	["lived"] = true, ["believe"] = true, ["believed"] = true, ["bring"] = true, ["brought"] = true,
-	["happen"] = true, ["happened"] = true, ["write"] = true, ["wrote"] = true, ["written"] = true,
-	["sit"] = true, ["sat"] = true, ["stand"] = true, ["stood"] = true, ["lose"] = true,
-	["lost"] = true, ["pay"] = true, ["paid"] = true, ["meet"] = true, ["met"] = true,
-	["include"] = true, ["included"] = true, ["continue"] = true, ["set"] = true, ["learn"] = true,
-	["learned"] = true, ["change"] = true, ["changed"] = true, ["lead"] = true, ["led"] = true,
-	["understand"] = true, ["watch"] = true, ["watched"] = true, ["follow"] = true, ["followed"] = true,
-	["stop"] = true, ["stopped"] = true, ["create"] = true, ["created"] = true, ["speak"] = true,
-	["spoke"] = true, ["spoken"] = true, ["read"] = true, ["allow"] = true, ["allowed"] = true,
-	["add"] = true, ["added"] = true, ["spend"] = true, ["spent"] = true, ["grow"] = true,
-	["grew"] = true, ["grown"] = true, ["open"] = true, ["opened"] = true, ["walk"] = true,
-	["walked"] = true, ["win"] = true, ["won"] = true, ["offer"] = true, ["offered"] = true,
-	["remember"] = true, ["love"] = true, ["loved"] = true, ["consider"] = true, ["appear"] = true,
-	["appeared"] = true, ["buy"] = true, ["bought"] = true, ["wait"] = true, ["waited"] = true,
-	["serve"] = true, ["served"] = true, ["die"] = true, ["died"] = true, ["send"] = true,
-	["sent"] = true, ["expect"] = true, ["expected"] = true, ["build"] = true, ["built"] = true,
-	["stay"] = true, ["stayed"] = true, ["fall"] = true, ["fell"] = true, ["fallen"] = true,
-	["cut"] = true, ["reach"] = true, ["reached"] = true, ["kill"] = true, ["killed"] = true,
-	["remain"] = true, ["remained"] = true, ["suggest"] = true, ["raise"] = true, ["raised"] = true,
-	["pass"] = true, ["passed"] = true, ["sell"] = true, ["sold"] = true, ["require"] = true,
-	["report"] = true, ["reported"] = true, ["decide"] = true, ["decided"] = true, ["pull"] = true,
-	["pulled"] = true,
+    ["a"] = true, ["an"] = true, ["the"] = true, ["and"] = true, ["but"] = true, 
+    ["or"] = true, ["nor"] = true, ["for"] = true, ["yet"] = true, ["so"] = true,
+    ["in"] = true, ["on"] = true, ["at"] = true, ["to"] = true, ["of"] = true, 
+    ["by"] = true, ["with"] = true, ["from"] = true, ["up"] = true, ["about"] = true, 
+    ["into"] = true, ["through"] = true, ["after"] = true, ["over"] = true, ["between"] = true,
+    ["out"] = true, ["against"] = true, ["during"] = true, ["without"] = true, ["before"] = true,
+    ["under"] = true, ["around"] = true, ["among"] = true, ["i"] = true, ["you"] = true, 
+    ["he"] = true, ["she"] = true, ["it"] = true, ["we"] = true, ["they"] = true, 
+    ["me"] = true, ["him"] = true, ["her"] = true, ["us"] = true, ["them"] = true,
+    ["my"] = true, ["your"] = true, ["his"] = true, ["its"] = true, ["our"] = true, 
+    ["their"] = true, ["mine"] = true, ["yours"] = true, ["hers"] = true, ["ours"] = true,
+    ["theirs"] = true, ["this"] = true, ["that"] = true, ["these"] = true, ["those"] = true,
+    ["who"] = true, ["what"] = true, ["which"] = true, ["whom"] = true, ["whose"] = true,
+    ["is"] = true, ["am"] = true, ["are"] = true, ["was"] = true, ["were"] = true, 
+    ["be"] = true, ["been"] = true, ["being"] = true, ["have"] = true, ["has"] = true,
+    ["had"] = true, ["having"] = true, ["do"] = true, ["does"] = true, ["did"] = true,
+    ["done"] = true, ["doing"] = true, ["will"] = true, ["would"] = true, ["could"] = true,
+    ["should"] = true, ["may"] = true, ["might"] = true, ["must"] = true, ["can"] = true,
+    ["shall"] = true, ["as"] = true, ["if"] = true, ["than"] = true, ["then"] = true,
+    ["now"] = true, ["just"] = true, ["where"] = true, ["when"] = true, ["why"] = true,
+    ["how"] = true, ["all"] = true, ["each"] = true, ["some"] = true, ["any"] = true,
+    ["many"] = true, ["much"] = true, ["more"] = true, ["most"] = true, ["other"] = true,
+    ["such"] = true, ["no"] = true, ["not"] = true, ["only"] = true, ["own"] = true,
+    ["same"] = true, ["too"] = true, ["very"] = true, ["yes"] = true, ["get"] = true,
+    ["got"] = true, ["go"] = true, ["gone"] = true, ["went"] = true, ["make"] = true,
+    ["made"] = true, ["see"] = true, ["saw"] = true, ["seen"] = true, ["come"] = true,
+    ["came"] = true, ["take"] = true, ["took"] = true, ["know"] = true, ["knew"] = true,
+    ["known"] = true, ["say"] = true, ["said"] = true, ["think"] = true, ["thought"] = true,
+    ["look"] = true, ["looked"] = true, ["want"] = true, ["wanted"] = true, ["use"] = true,
+    ["used"] = true, ["find"] = true, ["found"] = true, ["give"] = true, ["gave"] = true,
+    ["given"] = true, ["tell"] = true, ["told"] = true, ["work"] = true, ["worked"] = true,
+    ["call"] = true, ["called"] = true, ["try"] = true, ["tried"] = true, ["ask"] = true,
+    ["asked"] = true, ["need"] = true, ["needed"] = true, ["feel"] = true, ["felt"] = true,
+    ["become"] = true, ["became"] = true, ["leave"] = true, ["left"] = true, ["put"] = true,
+    ["mean"] = true, ["meant"] = true, ["keep"] = true, ["kept"] = true, ["let"] = true,
+    ["begin"] = true, ["began"] = true, ["seem"] = true, ["seemed"] = true, ["help"] = true,
+    ["helped"] = true, ["show"] = true, ["showed"] = true, ["shown"] = true, ["hear"] = true,
+    ["heard"] = true, ["play"] = true, ["played"] = true, ["run"] = true, ["ran"] = true,
+    ["move"] = true, ["moved"] = true, ["like"] = true, ["liked"] = true, ["live"] = true,
+    ["lived"] = true, ["believe"] = true, ["believed"] = true, ["bring"] = true, ["brought"] = true,
+    ["happen"] = true, ["happened"] = true, ["write"] = true, ["wrote"] = true, ["written"] = true,
+    ["sit"] = true, ["sat"] = true, ["stand"] = true, ["stood"] = true, ["lose"] = true,
+    ["lost"] = true, ["pay"] = true, ["paid"] = true, ["meet"] = true, ["met"] = true,
+    ["include"] = true, ["included"] = true, ["continue"] = true, ["set"] = true, ["learn"] = true,
+    ["learned"] = true, ["change"] = true, ["changed"] = true, ["lead"] = true, ["led"] = true,
+    ["understand"] = true, ["watch"] = true, ["watched"] = true, ["follow"] = true, ["followed"] = true,
+    ["stop"] = true, ["stopped"] = true, ["create"] = true, ["created"] = true, ["speak"] = true,
+    ["spoke"] = true, ["spoken"] = true, ["read"] = true, ["allow"] = true, ["allowed"] = true,
+    ["add"] = true, ["added"] = true, ["spend"] = true, ["spent"] = true, ["grow"] = true,
+    ["grew"] = true, ["grown"] = true, ["open"] = true, ["opened"] = true, ["walk"] = true,
+    ["walked"] = true, ["win"] = true, ["won"] = true, ["offer"] = true, ["offered"] = true,
+    ["remember"] = true, ["love"] = true, ["loved"] = true, ["consider"] = true, ["appear"] = true,
+    ["appeared"] = true, ["buy"] = true, ["bought"] = true, ["wait"] = true, ["waited"] = true,
+    ["serve"] = true, ["served"] = true, ["die"] = true, ["died"] = true, ["send"] = true,
+    ["sent"] = true, ["expect"] = true, ["expected"] = true, ["build"] = true, ["built"] = true,
+    ["stay"] = true, ["stayed"] = true, ["fall"] = true, ["fell"] = true, ["fallen"] = true,
+    ["cut"] = true, ["reach"] = true, ["reached"] = true, ["kill"] = true, ["killed"] = true,
+    ["remain"] = true, ["remained"] = true, ["suggest"] = true, ["raise"] = true, ["raised"] = true,
+    ["pass"] = true, ["passed"] = true, ["sell"] = true, ["sold"] = true, ["require"] = true,
+    ["report"] = true, ["reported"] = true, ["decide"] = true, ["decided"] = true, ["pull"] = true,
+    ["pulled"] = true,
 }
 
 local DICTIONARY_URLS = {
-	"https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
-	"https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
+    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
+    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
 }
 
+local WRONG_ANSWER_IMAGE = "rbxassetid://105102146522745"
+local CORRECT_ANSWER_IMAGE = "rbxassetid://127364693410245"
+
 local allWords = {}
+local wordsByPrefix = {} 
 local consoleAutoComplete = false
 local uiAutoComplete = false
+local autoPlayEnabled = false
 local usedWords = {}
+local usedWordsHistory = {} -- NEW: Track usage count and timestamps
 local lastWordTime = 0
 local topWords = {}
 local currentPage = 1
-local configVisible = true
 local mainFrameVisible = true
+local configVisible = true
+local searchDebounce = nil
+local isAutoPlaying = false
+local lastAutoPlayedWord = ""
+local currentAttemptWord = ""
+local lastWrongTryCount = 0
+local bannedWords = {}
+local isBackspacing = false 
 
--- Create ScreenGui with tactical theme
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "TacticalWordHelper"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
--- Main Status Frame
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 280, 0, 480)
+mainFrame.Size = UDim2.new(0, 280, 0, 560)
 mainFrame.Position = UDim2.new(0, 10, 0, 10)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 mainFrame.BorderColor3 = Color3.fromRGB(100, 100, 100)
 mainFrame.BorderSizePixel = 2
 mainFrame.Parent = screenGui
 
--- Title Bar
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 25)
 title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 title.BorderSizePixel = 0
-title.Text = isMobile and "[ WORD HELPER ] - Tap to hide" or "[ WORD HELPER ] - LShift to hide"
+title.Text = "[ WORD HELPER - PC ] - LShift to hide"
 title.TextColor3 = Color3.fromRGB(200, 200, 200)
 title.Font = Enum.Font.Code
-title.TextSize = isMobile and 10 or 14
+title.TextSize = 14
 title.Parent = mainFrame
-
--- Make title bar clickable for mobile
-if isMobile then
-	local titleButton = Instance.new("TextButton")
-	titleButton.Size = UDim2.new(1, 0, 1, 0)
-	titleButton.BackgroundTransparency = 1
-	titleButton.Text = ""
-	titleButton.Parent = title
-	
-	titleButton.MouseButton1Click:Connect(function()
-		mainFrameVisible = not mainFrameVisible
-		local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-		
-		if mainFrameVisible then
-			mainFrame.Visible = true
-			local tween = TweenService:Create(mainFrame, tweenInfo, {
-				Size = UDim2.new(0, 280, 0, 480),
-				Position = UDim2.new(0, 10, 0, 10)
-			})
-			tween:Play()
-		else
-			local tween = TweenService:Create(mainFrame, tweenInfo, {
-				Size = UDim2.new(0, 280, 0, 25),
-				Position = UDim2.new(0, 10, 0, 10)
-			})
-			tween:Play()
-			tween.Completed:Connect(function()
-				-- Keep visible but collapsed to show title only
-			end)
-		end
-	end)
-end
 
 local searchBox = Instance.new("TextBox")
 searchBox.Size = UDim2.new(1, -10, 0, 30)
@@ -191,38 +167,72 @@ autoLabel.TextSize = 11
 autoLabel.TextXAlignment = Enum.TextXAlignment.Left
 autoLabel.Parent = mainFrame
 
+local autoPlayLabel = Instance.new("TextLabel")
+autoPlayLabel.Size = UDim2.new(1, -10, 0, 20)
+autoPlayLabel.Position = UDim2.new(0, 5, 0, 95)
+autoPlayLabel.BackgroundTransparency = 1
+autoPlayLabel.Text = "Auto-Play: OFF"
+autoPlayLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+autoPlayLabel.Font = Enum.Font.Code
+autoPlayLabel.TextSize = 11
+autoPlayLabel.TextXAlignment = Enum.TextXAlignment.Left
+autoPlayLabel.Parent = mainFrame
+
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, -10, 0, 20)
-statusLabel.Position = UDim2.new(0, 5, 0, 95)
+statusLabel.Position = UDim2.new(0, 5, 0, 115)
 statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Words Loaded: 0 | Platform: " .. (isMobile and "MOBILE" or "PC")
+statusLabel.Text = "Words Loaded: 0 | Platform: PC"
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 statusLabel.Font = Enum.Font.Code
 statusLabel.TextSize = 11
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Parent = mainFrame
 
+local usageLabel = Instance.new("TextLabel")
+usageLabel.Size = UDim2.new(1, -10, 0, 20)
+usageLabel.Position = UDim2.new(0, 5, 0, 135)
+usageLabel.BackgroundTransparency = 1
+usageLabel.Text = "Used Words: 0"
+usageLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+usageLabel.Font = Enum.Font.Code
+usageLabel.TextSize = 11
+usageLabel.TextXAlignment = Enum.TextXAlignment.Left
+usageLabel.Parent = mainFrame
+
+local retryLabel = Instance.new("TextLabel")
+retryLabel.Size = UDim2.new(1, -10, 0, 20)
+retryLabel.Position = UDim2.new(0, 5, 0, 155)
+retryLabel.BackgroundTransparency = 1
+retryLabel.Text = "Banned Words: 0"
+retryLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+retryLabel.Font = Enum.Font.Code
+retryLabel.TextSize = 11
+retryLabel.TextXAlignment = Enum.TextXAlignment.Left
+retryLabel.Parent = mainFrame
+
 local function createButton(text, yPos)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -10, 0, 25)
-	btn.Position = UDim2.new(0, 5, 0, yPos)
-	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	btn.BorderColor3 = Color3.fromRGB(100, 100, 100)
-	btn.BorderSizePixel = 1
-	btn.Text = text
-	btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-	btn.Font = Enum.Font.Code
-	btn.TextSize = 11
-	btn.Parent = mainFrame
-	return btn
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 25)
+    btn.Position = UDim2.new(0, 5, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    btn.BorderSizePixel = 1
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 11
+    btn.Parent = mainFrame
+    return btn
 end
 
-local autoBtn = createButton("Toggle Auto-Fill", 125)
-local resetBtn = createButton("Reset Memory", 160)
+local autoBtn = createButton("Toggle Auto-Fill", 185)
+local autoPlayBtn = createButton("Toggle Auto-Play", 220)
+local resetBtn = createButton("Reset Memory", 255)
 
 local resultsFrame = Instance.new("ScrollingFrame")
-resultsFrame.Size = UDim2.new(1, -10, 0, 240)
-resultsFrame.Position = UDim2.new(0, 5, 0, 195)
+resultsFrame.Size = UDim2.new(1, -10, 0, 210)
+resultsFrame.Position = UDim2.new(0, 5, 0, 290)
 resultsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 resultsFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
 resultsFrame.BorderSizePixel = 1
@@ -239,7 +249,7 @@ resLayout.Parent = resultsFrame
 
 local pageLabel = Instance.new("TextLabel")
 pageLabel.Size = UDim2.new(1, -80, 0, 25)
-pageLabel.Position = UDim2.new(0, 40, 0, 445)
+pageLabel.Position = UDim2.new(0, 40, 0, 530)
 pageLabel.BackgroundTransparency = 1
 pageLabel.Text = "PAGE 1"
 pageLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -249,7 +259,7 @@ pageLabel.Parent = mainFrame
 
 local prevBtn = Instance.new("TextButton")
 prevBtn.Size = UDim2.new(0, 30, 0, 25)
-prevBtn.Position = UDim2.new(0, 5, 0, 445)
+prevBtn.Position = UDim2.new(0, 5, 0, 530)
 prevBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 prevBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
 prevBtn.BorderSizePixel = 1
@@ -261,7 +271,7 @@ prevBtn.Parent = mainFrame
 
 local nextBtn = Instance.new("TextButton")
 nextBtn.Size = UDim2.new(0, 30, 0, 25)
-nextBtn.Position = UDim2.new(1, -35, 0, 445)
+nextBtn.Position = UDim2.new(1, -35, 0, 530)
 nextBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 nextBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
 nextBtn.BorderSizePixel = 1
@@ -272,7 +282,7 @@ nextBtn.TextSize = 14
 nextBtn.Parent = mainFrame
 
 local configFrame = Instance.new("Frame")
-configFrame.Size = UDim2.new(0, 280, 0, 200)
+configFrame.Size = UDim2.new(0, 280, 0, 260)
 configFrame.Position = UDim2.new(0, 300, 0, 10)
 configFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 configFrame.BorderColor3 = Color3.fromRGB(100, 100, 100)
@@ -284,471 +294,774 @@ configTitle.Size = UDim2.new(1, 0, 0, 25)
 configTitle.Position = UDim2.new(0, 0, 0, 0)
 configTitle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 configTitle.BorderSizePixel = 0
-configTitle.Text = isMobile and "[ CONFIG - Double-tap to hide ]" or "[ CONFIG - RShift to hide ]"
+configTitle.Text = "[ CONFIG - PC ] - RShift to hide"
 configTitle.TextColor3 = Color3.fromRGB(200, 200, 200)
 configTitle.Font = Enum.Font.Code
-configTitle.TextSize = isMobile and 10 or 14
+configTitle.TextSize = 14
 configTitle.Parent = configFrame
 
-if isMobile then
-    local configTitleButton = Instance.new("TextButton")
-    configTitleButton.Size = UDim2.new(1, 0, 1, 0)
-    configTitleButton.BackgroundTransparency = 1
-    configTitleButton.Text = ""
-    configTitleButton.Parent = configTitle
-    
-    configTitleButton.MouseButton1Click:Connect(function()
-        configVisible = not configVisible
-        configFrame.Visible = configVisible
-    end)
-end
-
 local function createSlider(name, yPos, minVal, maxVal, defaultVal, increment, callback)
-	local container = Instance.new("Frame")
-	container.Size = UDim2.new(1, -10, 0, 50)
-	container.Position = UDim2.new(0, 5, 0, yPos)
-	container.BackgroundTransparency = 1
-	container.Parent = configFrame
-	
-	local label = Instance.new("TextLabel")
-	label.Size = UDim2.new(1, 0, 0, 18)
-	label.Position = UDim2.new(0, 0, 0, 0)
-	label.BackgroundTransparency = 1
-	label.Text = name .. ": " .. tostring(defaultVal)
-	label.TextColor3 = Color3.fromRGB(200, 200, 200)
-	label.Font = Enum.Font.Code
-	label.TextSize = 11
-	label.TextXAlignment = Enum.TextXAlignment.Left
-	label.Parent = container
-	
-	local sliderBack = Instance.new("Frame")
-	sliderBack.Size = UDim2.new(1, 0, 0, 6)
-	sliderBack.Position = UDim2.new(0, 0, 0, 22)
-	sliderBack.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	sliderBack.BorderColor3 = Color3.fromRGB(80, 80, 80)
-	sliderBack.BorderSizePixel = 1
-	sliderBack.Parent = container
-	
-	local sliderFill = Instance.new("Frame")
-	sliderFill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
-	sliderFill.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
-	sliderFill.BorderSizePixel = 0
-	sliderFill.Parent = sliderBack
-	
-	local minusBtn = Instance.new("TextButton")
-	minusBtn.Size = UDim2.new(0, 30, 0, 18)
-	minusBtn.Position = UDim2.new(0, 0, 0, 32)
-	minusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	minusBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
-	minusBtn.BorderSizePixel = 1
-	minusBtn.Text = "-"
-	minusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-	minusBtn.Font = Enum.Font.Code
-	minusBtn.TextSize = 14
-	minusBtn.Parent = container
-	
-	local plusBtn = Instance.new("TextButton")
-	plusBtn.Size = UDim2.new(0, 30, 0, 18)
-	plusBtn.Position = UDim2.new(1, -30, 0, 32)
-	plusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	plusBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
-	plusBtn.BorderSizePixel = 1
-	plusBtn.Text = "+"
-	plusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-	plusBtn.Font = Enum.Font.Code
-	plusBtn.TextSize = 14
-	plusBtn.Parent = container
-	
-	local currentValue = defaultVal
-	
-	local function updateValue(newValue)
-		newValue = math.clamp(newValue, minVal, maxVal)
-		currentValue = math.floor((newValue / increment) + 0.5) * increment
-		label.Text = name .. ": " .. string.format("%.2f", currentValue)
-		sliderFill.Size = UDim2.new((currentValue - minVal) / (maxVal - minVal), 0, 1, 0)
-		callback(currentValue)
-	end
-	
-	minusBtn.MouseButton1Click:Connect(function()
-		updateValue(currentValue - increment)
-	end)
-	
-	plusBtn.MouseButton1Click:Connect(function()
-		updateValue(currentValue + increment)
-	end)
-	
-	local dragging = false
-	
-	sliderBack.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			local mouseX = input.Position.X
-			local sliderX = sliderBack.AbsolutePosition.X
-			local sliderWidth = sliderBack.AbsoluteSize.X
-			local percent = math.clamp((mouseX - sliderX) / sliderWidth, 0, 1)
-			local newValue = minVal + (percent * (maxVal - minVal))
-			updateValue(newValue)
-		end
-	end)
-	
-	sliderBack.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-	
-	UserInputService.InputChanged:Connect(function(input)
-		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			local mouseX = input.Position.X
-			local sliderX = sliderBack.AbsolutePosition.X
-			local sliderWidth = sliderBack.AbsoluteSize.X
-			local percent = math.clamp((mouseX - sliderX) / sliderWidth, 0, 1)
-			local newValue = minVal + (percent * (maxVal - minVal))
-			updateValue(newValue)
-		end
-	end)
-end
-
-createSlider("Typing Speed", 35, 0.05, 0.5, CONFIG.typingSpeed, 0.05, function(val)
-	CONFIG.typingSpeed = val
-end)
-
-createSlider("Words Per Page", 95, 5, 15, CONFIG.wordsPerPage, 1, function(val)
-	CONFIG.wordsPerPage = math.floor(val)
-end)
-
-createSlider("Ideal Length", 155, 3, 45, CONFIG.idealLength, 1, function(val)
-	CONFIG.idealLength = math.floor(val)
-	CONFIG.maxLength = math.max(CONFIG.idealLength, CONFIG.maxLength)
-end)
-
--- Functions
-local function notify(message)
-	pcall(function()
-		StarterGui:SetCore("SendNotification", {
-			Title = "Word Helper",
-			Text = message,
-			Duration = 1
-		})
-	end)
-end
-
-local function loadFromJSON(content)
-	local success, wordsJson = pcall(function()
-		return HttpService:JSONDecode(content)
-	end)
-	if not success then return false end
-	for word, _ in pairs(wordsJson) do
-		local len = #word
-		local lowerWord = word:lower()
-		if len >= CONFIG.minLength and len <= CONFIG.maxLength then
-			if len > 20 or not commonWords[lowerWord] then
-				table.insert(allWords, lowerWord)
-			end
-		end
-	end
-	return true
-end
-
-local function loadFromText(content)
-	for word in content:gmatch("[^\r\n]+") do
-		local len = #word
-		local lowerWord = word:lower()
-		if len >= CONFIG.minLength and len <= CONFIG.maxLength then
-			if len > 20 or not commonWords[lowerWord] then
-				table.insert(allWords, lowerWord)
-			end
-		end
-	end
-	return #allWords > 0
-end
-
-local function loadDictionary()
-	searchBox.PlaceholderText = "LOADING..."
-	statusLabel.Text = "Status: Loading Dictionary..."
-	statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
-	
-	for i, url in ipairs(DICTIONARY_URLS) do
-		local ok, content = pcall(function() return game:HttpGet(url) end)
-		if ok then
-			local loaded = false
-			if content:match("^%s*{") then loaded = loadFromJSON(content)
-			else loaded = loadFromText(content) end
-			
-			if loaded then
-				searchBox.PlaceholderText = "TYPE OR WAIT..."
-				statusLabel.Text = "Words: " .. #allWords .. " | Platform: " .. (isMobile and "MOBILE" or "PC")
-				statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-				notify("Loaded " .. #allWords .. " words")
-				return true
-			end
-		end
-	end
-	
-	searchBox.PlaceholderText = "ERROR LOADING"
-	statusLabel.Text = "Status: ERROR"
-	statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-	return false
-end
-
-local function autoTypeWord(word, currentInput)
-	local remaining = word:sub(#currentInput + 1)
-	task.spawn(function()
-		local cam = workspace.CurrentCamera
-		local size = cam.ViewportSize
-		local x, y = size.X/2, size.Y/2
-		
-		for _ = 1,2 do
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
-			task.wait()
-			VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
-			task.wait()
-		end
-
-		for c in remaining:upper():gmatch(".") do
-			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[c], false, game)
-			task.wait(CONFIG.typingSpeed)
-			VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[c], false, game)
-		end
-		
-		task.wait(0.1)
-		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-	end)
-end
-
-local function displayPage()
-	for _, c in ipairs(resultsFrame:GetChildren()) do
-		if c:IsA("TextButton") then c:Destroy() end
-	end
-
-	local startIdx = (currentPage-1)*CONFIG.wordsPerPage + 1
-	local endIdx = math.min(currentPage*CONFIG.wordsPerPage, #topWords)
-	
-	local totalPages = math.ceil(#topWords/CONFIG.wordsPerPage)
-	pageLabel.Text = "PAGE " .. currentPage .. " / " .. totalPages
-
-	for i = startIdx, endIdx do
-		local word = topWords[i]
-		local isTopResult = (i == startIdx)
-		
-		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(1, -6, 0, isTopResult and 28 or 22)
-		btn.BackgroundColor3 = isTopResult and Color3.fromRGB(40, 60, 40) or Color3.fromRGB(40, 40, 40)
-		btn.BorderColor3 = isTopResult and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(80, 80, 80)
-		btn.BorderSizePixel = 1
-		btn.Text = word:upper()
-		btn.Font = Enum.Font.Code
-		btn.TextSize = isTopResult and 13 or 11
-		btn.TextColor3 = isTopResult and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(200, 200, 200)
-		btn.AutoButtonColor = true
-		btn.TextScaled = #word > 25
-		btn.Parent = resultsFrame
-		
-		btn.MouseButton1Click:Connect(function()
-			usedWords[word] = true
-			autoTypeWord(word, searchBox.Text)
-			searchBox.Text = ""
-			topWords = {}
-			displayPage()
-		end)
-	end
-end
-
-local function updateTopWords(input)
-	topWords = {}
-	input = input:lower()
-	
-	if input == "" then
-		displayPage()
-		return
-	end
-
-	for _, w in ipairs(allWords) do
-		if w:sub(1, #input) == input and w ~= input and not usedWords[w] then
-			table.insert(topWords, w)
-		end
-	end
-
-	table.sort(topWords, function(a, b)
-		local lenA, lenB = #a, #b
-		local distA = math.abs(lenA - CONFIG.idealLength)
-		local distB = math.abs(lenB - CONFIG.idealLength)
-		if distA == distB then return lenA < lenB end
-		return distA < distB
-	end)
-
-	currentPage = 1
-	displayPage()
-end
-
--- Event Connections
-searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-	updateTopWords(searchBox.Text)
-end)
-
-searchBox.Focused:Connect(function()
-	searchBox.Text = ""
-end)
-
-autoBtn.MouseButton1Click:Connect(function()
-	if consoleAutoComplete then
-		consoleAutoComplete = false
-		uiAutoComplete = true
-		autoLabel.Text = "Auto-Fill: UI MODE"
-		autoLabel.TextColor3 = Color3.fromRGB(100, 150, 255)
-	elseif uiAutoComplete then
-		uiAutoComplete = false
-		autoLabel.Text = "Auto-Fill: OFF"
-		autoLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-	else
-		consoleAutoComplete = true
-		autoLabel.Text = "Auto-Fill: CONSOLE"
-		autoLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-	end
-end)
-
-resetBtn.MouseButton1Click:Connect(function()
-	usedWords = {}
-	lastWordTime = 0
-	notify("Memory Reset")
-end)
-
-prevBtn.MouseButton1Click:Connect(function()
-	if currentPage > 1 then
-		currentPage = currentPage - 1
-		displayPage()
-	end
-end)
-
-nextBtn.MouseButton1Click:Connect(function()
-	if currentPage < math.ceil(#topWords/CONFIG.wordsPerPage) then
-		currentPage = currentPage + 1
-		displayPage()
-	end
-end)
-
-if isPC then
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if input.KeyCode == Enum.KeyCode.LeftShift then
-            mainFrameVisible = not mainFrameVisible
-            mainFrame.Visible = mainFrameVisible
-            
-            if mainFrameVisible then
-                mainFrame.Size = UDim2.new(0, 280, 0, 480)
-            end
-            
-        elseif input.KeyCode == Enum.KeyCode.RightShift then
-            configVisible = not configVisible
-            configFrame.Visible = configVisible
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 50)
+    container.Position = UDim2.new(0, 5, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = configFrame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 18)
+    label.Position = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name .. ": " .. tostring(defaultVal)
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.Code
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+    
+    local sliderBack = Instance.new("Frame")
+    sliderBack.Size = UDim2.new(1, 0, 0, 6)
+    sliderBack.Position = UDim2.new(0, 0, 0, 22)
+    sliderBack.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    sliderBack.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    sliderBack.BorderSizePixel = 1
+    sliderBack.Parent = container
+    
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new((defaultVal - minVal) / (maxVal - minVal), 0, 1, 0)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+    sliderFill.BorderSizePixel = 0
+    sliderFill.Parent = sliderBack
+    
+    local minusBtn = Instance.new("TextButton")
+    minusBtn.Size = UDim2.new(0, 30, 0, 18)
+    minusBtn.Position = UDim2.new(0, 0, 0, 32)
+    minusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    minusBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    minusBtn.BorderSizePixel = 1
+    minusBtn.Text = "-"
+    minusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    minusBtn.Font = Enum.Font.Code
+    minusBtn.TextSize = 14
+    minusBtn.Parent = container
+    
+    local plusBtn = Instance.new("TextButton")
+    plusBtn.Size = UDim2.new(0, 30, 0, 18)
+    plusBtn.Position = UDim2.new(1, -30, 0, 32)
+    plusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    plusBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    plusBtn.BorderSizePixel = 1
+    plusBtn.Text = "+"
+    plusBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    plusBtn.Font = Enum.Font.Code
+    plusBtn.TextSize = 14
+    plusBtn.Parent = container
+    
+    local currentValue = defaultVal
+    
+    local function updateValue(newValue)
+        newValue = math.clamp(newValue, minVal, maxVal)
+        currentValue = math.floor((newValue / increment) + 0.5) * increment
+        label.Text = name .. ": " .. string.format("%.2f", currentValue)
+        sliderFill.Size = UDim2.new((currentValue - minVal) / (maxVal - minVal), 0, 1, 0)
+        callback(currentValue)
+    end
+    
+    minusBtn.MouseButton1Click:Connect(function()
+        updateValue(currentValue - increment)
+    end)
+    
+    plusBtn.MouseButton1Click:Connect(function()
+        updateValue(currentValue + increment)
+    end)
+    
+    local dragging = false
+    
+    sliderBack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            local mouseX = input.Position.X
+            local sliderX = sliderBack.AbsolutePosition.X
+            local sliderWidth = sliderBack.AbsoluteSize.X
+            local percent = math.clamp((mouseX - sliderX) / sliderWidth, 0, 1)
+            local newValue = minVal + (percent * (maxVal - minVal))
+            updateValue(newValue)
+        end
+    end)
+    
+    sliderBack.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mouseX = input.Position.X
+            local sliderX = sliderBack.AbsolutePosition.X
+            local sliderWidth = sliderBack.AbsoluteSize.X
+            local percent = math.clamp((mouseX - sliderX) / sliderWidth, 0, 1)
+            local newValue = minVal + (percent * (maxVal - minVal))
+            updateValue(newValue)
         end
     end)
 end
 
--- Console auto-complete
+createSlider("Typing Speed", 35, 0.05, 0.5, CONFIG.typingSpeed, 0.05, function(val)
+    CONFIG.typingSpeed = val
+end)
+
+createSlider("Words Per Page", 95, 5, 15, CONFIG.wordsPerPage, 1, function(val)
+    CONFIG.wordsPerPage = math.floor(val)
+end)
+
+createSlider("Ideal Length", 155, 3, 45, CONFIG.idealLength, 1, function(val)
+    CONFIG.idealLength = math.floor(val)
+    CONFIG.maxLength = math.max(CONFIG.idealLength, CONFIG.maxLength)
+end)
+
+createSlider("Auto-Play Delay", 215, 0.1, 2.0, CONFIG.autoPlayDelay, 0.1, function(val)
+    CONFIG.autoPlayDelay = val
+end)
+
+-- NEW: Enhanced word usage tracking
+local function markWordAsUsed(word)
+    local currentTime = tick()
+    
+    -- Mark as used
+    usedWords[word] = true
+    
+    -- Track detailed usage
+    if not usedWordsHistory[word] then
+        usedWordsHistory[word] = {
+            count = 0,
+            firstUsed = currentTime,
+            lastUsed = currentTime
+        }
+    end
+    
+    usedWordsHistory[word].count = usedWordsHistory[word].count + 1
+    usedWordsHistory[word].lastUsed = currentTime
+    
+    -- Update usage counter
+    local usedCount = 0
+    for _ in pairs(usedWords) do
+        usedCount = usedCount + 1
+    end
+    usageLabel.Text = "Used Words: " .. usedCount
+    
+    print("[WORD USED] " .. word .. " (Total uses: " .. usedWordsHistory[word].count .. ")")
+end
+
+-- NEW: Better detection of successful word submission
+local function detectSuccessfulSubmission()
+    local success, result = pcall(function()
+        local inGameGui = playerGui:FindFirstChild("InGame")
+        if not inGameGui then return false end
+        
+        local frame = inGameGui:FindFirstChild("Frame")
+        if not frame then return false end
+        
+        local tries = frame:FindFirstChild("Tries")
+        if not tries then return false end
+        
+        -- Check if latest try is correct (green checkmark)
+        for i = 1, 5 do
+            local tryImage = tries:FindFirstChild(tostring(i))
+            if tryImage and tryImage:IsA("ImageLabel") then
+                if tryImage.Image == CORRECT_ANSWER_IMAGE then
+                    return true -- Found a correct answer
+                end
+            end
+        end
+        
+        return false
+    end)
+    
+    return success and result
+end
+
+local function buildPrefixIndex()
+    wordsByPrefix = {}
+    for _, word in ipairs(allWords) do
+        for i = 1, math.min(#word, 10) do
+            local prefix = word:sub(1, i)
+            if not wordsByPrefix[prefix] then
+                wordsByPrefix[prefix] = {}
+            end
+            table.insert(wordsByPrefix[prefix], word)
+        end
+    end
+end
+
+local function loadFromJSON(content)
+    local success, wordsJson = pcall(function()
+        return HttpService:JSONDecode(content)
+    end)
+    if not success then return false end
+    for word, _ in pairs(wordsJson) do
+        local len = #word
+        local lowerWord = word:lower()
+        if len >= CONFIG.minLength and len <= CONFIG.maxLength then
+            if len > 20 or not commonWords[lowerWord] then
+                table.insert(allWords, lowerWord)
+            end
+        end
+    end
+    return true
+end
+
+local function loadFromText(content)
+    for word in content:gmatch("[^\r\n]+") do
+        local len = #word
+        local lowerWord = word:lower()
+        if len >= CONFIG.minLength and len <= CONFIG.maxLength then
+            if len > 20 or not commonWords[lowerWord] then
+                table.insert(allWords, lowerWord)
+            end
+        end
+    end
+    return #allWords > 0
+end
+
+local function loadDictionary()
+    searchBox.PlaceholderText = "LOADING..."
+    statusLabel.Text = "Status: Loading Dictionary..."
+    statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+    
+    for i, url in ipairs(DICTIONARY_URLS) do
+        local ok, content = pcall(function() return game:HttpGet(url) end)
+        if ok then
+            local loaded = false
+            if content:match("^%s*{") then loaded = loadFromJSON(content)
+            else loaded = loadFromText(content) end
+            
+            if loaded then
+                buildPrefixIndex()
+                searchBox.PlaceholderText = "TYPE OR WAIT..."
+                statusLabel.Text = "Words: " .. #allWords .. " | Platform: PC"
+                statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+                return true
+            end
+        end
+    end
+    
+    searchBox.PlaceholderText = "ERROR LOADING"
+    statusLabel.Text = "Status: ERROR"
+    statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    return false
+end
+
+local function clearCurrentWord()
+    if isBackspacing then
+        return
+    end
+    
+    isBackspacing = true
+    print("[BACKSPACE] Starting deletion...")
+    
+    task.spawn(function()
+        for i = 1, 30 do
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Backspace, false, game)
+            task.wait(0.02)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Backspace, false, game)
+            task.wait(0.02)
+        end
+        
+        task.wait(CONFIG.backspaceDelay)
+        isBackspacing = false
+        print("[BACKSPACE] Deletion completed!")
+    end)
+end
+
+local function autoTypeWord(word, currentInput)
+    -- Mark word as about to be used
+    local remaining = word:sub(#currentInput + 1)
+    
+    task.spawn(function()
+        local cam = workspace.CurrentCamera
+        local size = cam.ViewportSize
+        local x, y = size.X/2, size.Y/2
+        
+        for _ = 1,2 do
+            VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, game, 1)
+            task.wait()
+            VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, game, 1)
+            task.wait()
+        end
+
+        for c in remaining:upper():gmatch(".") do
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[c], false, game)
+            task.wait(CONFIG.typingSpeed)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[c], false, game)
+        end
+        
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+        
+        -- Mark word as used after typing completes
+        task.wait(0.2)
+        markWordAsUsed(word)
+    end)
+end
+
+local function displayPage()
+    for _, c in ipairs(resultsFrame:GetChildren()) do
+        if c:IsA("TextButton") then c:Destroy() end
+    end
+
+    local startIdx = (currentPage-1)*CONFIG.wordsPerPage + 1
+    local endIdx = math.min(currentPage*CONFIG.wordsPerPage, #topWords)
+    
+    local totalPages = math.ceil(#topWords/CONFIG.wordsPerPage)
+    pageLabel.Text = "PAGE " .. currentPage .. " / " .. totalPages
+
+    for i = startIdx, endIdx do
+        local word = topWords[i]
+        local isTopResult = (i == startIdx)
+        local isBanned = bannedWords[word]
+        local isUsed = usedWords[word]
+        
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -6, 0, isTopResult and 28 or 22)
+        
+        -- Color coding: banned = red, used = yellow, top = green, normal = gray
+        if isBanned then
+            btn.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
+            btn.BorderColor3 = Color3.fromRGB(255, 100, 100)
+            btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+        elseif isUsed then
+            btn.BackgroundColor3 = Color3.fromRGB(60, 60, 30)
+            btn.BorderColor3 = Color3.fromRGB(255, 255, 100)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 100)
+        elseif isTopResult then
+            btn.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
+            btn.BorderColor3 = Color3.fromRGB(100, 255, 100)
+            btn.TextColor3 = Color3.fromRGB(100, 255, 100)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            btn.BorderColor3 = Color3.fromRGB(80, 80, 80)
+            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+        
+        btn.BorderSizePixel = 1
+        
+        -- Display usage count if word has been used
+        local displayText = word:upper()
+        if isBanned then
+            displayText = displayText .. " [BANNED]"
+        elseif isUsed and usedWordsHistory[word] then
+            displayText = displayText .. " (x" .. usedWordsHistory[word].count .. ")"
+        end
+        
+        btn.Text = displayText
+        btn.Font = Enum.Font.Code
+        btn.TextSize = isTopResult and 13 or 11
+        btn.AutoButtonColor = true
+        btn.TextScaled = #word > 25
+        btn.Parent = resultsFrame
+        
+        btn.MouseButton1Click:Connect(function()
+            if not isBanned then
+                autoTypeWord(word, searchBox.Text)
+                searchBox.Text = ""
+                topWords = {}
+                displayPage()
+            end
+        end)
+    end
+end
+
+local function updateTopWords(input)
+    topWords = {}
+    input = input:lower()
+    
+    if input == "" then
+        displayPage()
+        return
+    end
+
+    local candidateWords = wordsByPrefix[input] or allWords
+    local maxResults = 100
+    local count = 0
+    
+    for _, w in ipairs(candidateWords) do
+        if count >= maxResults then break end
+        if w:sub(1, #input) == input and w ~= input then
+            table.insert(topWords, w)
+            count = count + 1
+        end
+    end
+
+    table.sort(topWords, function(a, b)
+        local aBanned = bannedWords[a] or false
+        local bBanned = bannedWords[b] or false
+        local aUsed = usedWords[a] or false
+        local bUsed = usedWords[b] or false
+        
+        -- Priority: non-banned > non-used > ideal length
+        if aBanned ~= bBanned then
+            return not aBanned
+        end
+        
+        if aUsed ~= bUsed then
+            return not aUsed
+        end
+        
+        local lenA, lenB = #a, #b
+        local distA = math.abs(lenA - CONFIG.idealLength)
+        local distB = math.abs(lenB - CONFIG.idealLength)
+        if distA == distB then return lenA < lenB end
+        return distA < distB
+    end)
+
+    currentPage = 1
+    displayPage()
+    
+    -- Update counters
+    local bannedCount = 0
+    for _ in pairs(bannedWords) do
+        bannedCount = bannedCount + 1
+    end
+    retryLabel.Text = "Banned Words: " .. bannedCount
+    
+    local usedCount = 0
+    for _ in pairs(usedWords) do
+        usedCount = usedCount + 1
+    end
+    usageLabel.Text = "Used Words: " .. usedCount
+end
+
+local function isMyTurn()
+	local success, result = pcall(function()
+		local inGameGui = playerGui:FindFirstChild("InGame")
+		if not inGameGui then return false end
+		
+		local frame = inGameGui:FindFirstChild("Frame")
+		if not frame then return false end
+		
+		local typeLabel = frame:FindFirstChild("Type")
+		if not typeLabel or not typeLabel:IsA("TextLabel") then return false end
+		
+		local text = typeLabel.Text
+		local myName = player.Name
+		
+		return string.find(text, myName) ~= nil
+	end)
+	
+	return success and result or false
+end
+
+local function getWrongTryCount()
+    local success, count = pcall(function()
+        local inGameGui = playerGui:FindFirstChild("InGame")
+        if not inGameGui then return 0 end
+        
+        local frame = inGameGui:FindFirstChild("Frame")
+        if not frame then return 0 end
+        
+        local tries = frame:FindFirstChild("Tries")
+        if not tries then return 0 end
+        
+        local wrongCount = 0
+        for i = 1, 5 do
+            local tryImage = tries:FindFirstChild(tostring(i))
+            if tryImage and tryImage:IsA("ImageLabel") then
+                if tryImage.Image == WRONG_ANSWER_IMAGE then
+                    wrongCount = wrongCount + 1
+                end
+            end
+        end
+        
+        return wrongCount
+    end)
+    
+    return success and count or 0
+end
+
+local function getBestWord(input)
+    for _, word in ipairs(topWords) do
+        if not bannedWords[word] then
+            return word
+        end
+    end
+    return nil
+end
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    if searchDebounce then
+        searchDebounce:Cancel()
+    end
+    
+    searchDebounce = task.delay(0.05, function()
+        updateTopWords(searchBox.Text)
+        searchDebounce = nil
+    end)
+end)
+
+searchBox.Focused:Connect(function()
+    searchBox.Text = ""
+end)
+
+autoBtn.MouseButton1Click:Connect(function()
+    if consoleAutoComplete then
+        consoleAutoComplete = false
+        uiAutoComplete = true
+        autoLabel.Text = "Auto-Fill: UI MODE"
+        autoLabel.TextColor3 = Color3.fromRGB(100, 150, 255)
+    elseif uiAutoComplete then
+        uiAutoComplete = false
+        autoLabel.Text = "Auto-Fill: OFF"
+        autoLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    else
+        consoleAutoComplete = true
+        autoLabel.Text = "Auto-Fill: CONSOLE"
+        autoLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end
+end)
+
+autoPlayBtn.MouseButton1Click:Connect(function()
+    autoPlayEnabled = not autoPlayEnabled
+    if autoPlayEnabled then
+        autoPlayLabel.Text = "Auto-Play: ON"
+        autoPlayLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    else
+        autoPlayLabel.Text = "Auto-Play: OFF"
+        autoPlayLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end)
+
+resetBtn.MouseButton1Click:Connect(function()
+    usedWords = {}
+    usedWordsHistory = {}
+    bannedWords = {}
+    lastWordTime = 0
+    lastWrongTryCount = 0
+    usageLabel.Text = "Used Words: 0"
+    retryLabel.Text = "Banned Words: 0"
+    updateTopWords(searchBox.Text)
+    print("[RESET] All word memory cleared!")
+end)
+
+prevBtn.MouseButton1Click:Connect(function()
+    if currentPage > 1 then
+        currentPage = currentPage - 1
+        displayPage()
+    end
+end)
+
+nextBtn.MouseButton1Click:Connect(function()
+    if currentPage < math.ceil(#topWords/CONFIG.wordsPerPage) then
+        currentPage = currentPage + 1
+        displayPage()
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.LeftShift then
+        mainFrameVisible = not mainFrameVisible
+        mainFrame.Visible = mainFrameVisible
+    elseif input.KeyCode == Enum.KeyCode.RightShift then
+        configVisible = not configVisible
+        configFrame.Visible = configVisible
+    end
+end)
+
 local function extractLetters(message)
-	local pattern = "Word:%s*([A-Z][A-Z]?[A-Z]?[A-Z]?)"
-	return string.match(message, pattern)
+    local pattern = "Word:%s*([A-Z][A-Z]?[A-Z]?[A-Z]?)"
+    return string.match(message, pattern)
 end
 
 LogService.MessageOut:Connect(function(message, messageType)
-	if string.find(message, "Word:") then
-		local letters = extractLetters(message)
-		if letters and consoleAutoComplete then
-			lastWordTime = tick()
-			searchBox.Text = letters
-		end
-	end
+    if string.find(message, "Word:") then
+        local letters = extractLetters(message)
+        if letters and consoleAutoComplete then
+            lastWordTime = tick()
+            searchBox.Text = letters
+        end
+    end
 end)
 
--- UI Letter Detection
 local function getLettersFromUI()
-	local success, result = pcall(function()
-		local inGameGui = playerGui:WaitForChild("InGame", 1)
-		if not inGameGui then return nil end
-		
-		local frame = inGameGui:FindFirstChild("Frame")
-		if not frame then return nil end
-		
-		local currentWord = frame:FindFirstChild("Current word")
-		if not currentWord then
-			currentWord = frame:FindFirstChild("Currentword")
-		end
-		if not currentWord then
-			currentWord = frame:FindFirstChild("CurrentWord")
-		end
-		if not currentWord then
-			for _, child in ipairs(frame:GetChildren()) do
-				if child:IsA("Frame") and child:FindFirstChild("1") then
-					currentWord = child
-					break
-				end
-			end
-		end
-		
-		if not currentWord then return nil end
-		
-		local letters = {}
-		for i = 1, 20 do
-			local letterFrame = currentWord:FindFirstChild(tostring(i))
-			if letterFrame then
-				local letterLabel = letterFrame:FindFirstChild("Letter")
-				if letterLabel and letterLabel:IsA("TextLabel") then
-					local letter = letterLabel.Text
-					if letter and letter ~= "" then
-						table.insert(letters, letter:upper())
-					end
-				end
-			else
-				break
-			end
-		end
-		
-		if #letters > 0 then
-			return table.concat(letters, "")
-		end
-		
-		return nil
-	end)
-	
-	if not success then
-		return nil
-	end
-	
-	return result
+    local success, result = pcall(function()
+        local inGameGui = playerGui:FindFirstChild("InGame") 
+        if not inGameGui then return nil end
+        
+        local frame = inGameGui:FindFirstChild("Frame")
+        if not frame then return nil end
+        
+        local currentWord = frame:FindFirstChild("Current word") or 
+                           frame:FindFirstChild("Currentword") or 
+                           frame:FindFirstChild("CurrentWord")
+        
+        if not currentWord then
+            for _, child in ipairs(frame:GetChildren()) do
+                if child:IsA("Frame") and child:FindFirstChild("1") then
+                    currentWord = child
+                    break
+                end
+            end
+        end
+        
+        if not currentWord then return nil end
+        
+        local letters = {}
+        for i = 1, 20 do
+            local letterFrame = currentWord:FindFirstChild(tostring(i))
+            if letterFrame then
+                local letterLabel = letterFrame:FindFirstChild("Letter")
+                if letterLabel and letterLabel:IsA("TextLabel") then
+                    local letter = letterLabel.Text
+                    if letter and letter ~= "" then
+                        table.insert(letters, letter:upper())
+                    end
+                end
+            else
+                break
+            end
+        end
+        
+        return #letters > 0 and table.concat(letters, "") or nil
+    end)
+    
+    return success and result or nil
 end
 
--- Monitor UI for letter changes
+-- Enhanced auto-play monitoring with better word tracking
 task.spawn(function()
-	local lastDetectedLetters = ""
-	task.wait(2)
-	
-	while task.wait(0.3) do
-		if uiAutoComplete then
-			local currentLetters = getLettersFromUI()
-			
-			if currentLetters and currentLetters ~= "" and currentLetters ~= lastDetectedLetters then
-				lastDetectedLetters = currentLetters
-				lastWordTime = tick()
-				searchBox.Text = currentLetters
-				notify("Detected: " .. currentLetters)
-			end
-		else
-			if lastDetectedLetters ~= "" then
-				lastDetectedLetters = ""
-			end
-		end
-	end
+    task.wait(2)
+    
+    while task.wait(0.1) do
+        if autoPlayEnabled and isAutoPlaying and currentAttemptWord ~= "" then
+            local currentWrongCount = getWrongTryCount()
+            
+            if currentWrongCount > lastWrongTryCount then
+                bannedWords[currentAttemptWord] = true
+                print("[AUTO-PLAY] Word BANNED: " .. currentAttemptWord)
+                
+                lastWrongTryCount = currentWrongCount
+                
+                while isBackspacing do
+                    task.wait(0.1)
+                end
+                
+                clearCurrentWord()
+                
+                while isBackspacing do
+                    task.wait(0.1)
+                end
+                
+                print("[AUTO-PLAY] Backspace completed, searching for new word...")
+                
+                local letters = getLettersFromUI()
+                if letters and isMyTurn() then
+                    updateTopWords(letters)
+                    local newBestWord = getBestWord(letters)
+                    
+                    if newBestWord then
+                        print("[AUTO-PLAY] Retrying with: " .. newBestWord)
+                        currentAttemptWord = newBestWord
+                        autoTypeWord(newBestWord, letters)
+                    else
+                        print("[AUTO-PLAY] No valid words left!")
+                        isAutoPlaying = false
+                        currentAttemptWord = ""
+                    end
+                else
+                    isAutoPlaying = false
+                    currentAttemptWord = ""
+                end
+            end
+        end
+    end
 end)
 
--- Auto-reset timer
+-- Main auto-play loop with word tracking
 task.spawn(function()
-	while task.wait(10) do
-		if lastWordTime > 0 and tick() - lastWordTime > CONFIG.autoResetTime then
-			usedWords = {}
-			lastWordTime = 0
-		end
-	end
+    local lastDetectedLetters = ""
+    local wasMyTurn = false
+    task.wait(2)
+    
+    while task.wait(0.1) do 
+        if uiAutoComplete or autoPlayEnabled then
+            local currentlyMyTurn = isMyTurn()
+            
+            if currentlyMyTurn then
+                if not wasMyTurn then
+                    task.wait(CONFIG.turnSettlingTime)
+                    wasMyTurn = true
+                    lastWrongTryCount = getWrongTryCount()
+                end
+                
+                local currentLetters = getLettersFromUI()
+                
+                if currentLetters and currentLetters ~= "" and currentLetters ~= lastDetectedLetters then
+                    lastDetectedLetters = currentLetters
+                    lastWordTime = tick()
+                    searchBox.Text = currentLetters
+                    
+                    if autoPlayEnabled and not isAutoPlaying then
+                        isAutoPlaying = true
+                        task.wait(CONFIG.autoPlayDelay)
+                        
+                        if isMyTurn() and searchBox.Text == currentLetters then
+                            local bestWord = getBestWord(currentLetters)
+                            if bestWord and bestWord ~= lastAutoPlayedWord then
+                                lastAutoPlayedWord = bestWord
+                                currentAttemptWord = bestWord
+                                print("[AUTO-PLAY] Attempting: " .. bestWord)
+                                autoTypeWord(bestWord, currentLetters)
+                                
+                                task.wait(CONFIG.wrongAnswerCheckDelay)
+                                
+                                if not isMyTurn() then
+                                    print("[AUTO-PLAY] Success! Turn ended.")
+                                    isAutoPlaying = false
+                                    currentAttemptWord = ""
+                                    searchBox.Text = ""
+                                    topWords = {}
+                                    displayPage()
+                                end
+                            else
+                                isAutoPlaying = false
+                                currentAttemptWord = ""
+                            end
+                        else
+                            isAutoPlaying = false
+                            currentAttemptWord = ""
+                        end
+                    end
+                end
+            else
+                wasMyTurn = false
+                isAutoPlaying = false
+                if lastDetectedLetters ~= "" then
+                    lastDetectedLetters = "" 
+                    lastAutoPlayedWord = ""
+                    currentAttemptWord = ""
+                end
+            end
+        else
+            wasMyTurn = false
+            isAutoPlaying = false
+            lastDetectedLetters = ""
+            lastAutoPlayedWord = ""
+            currentAttemptWord = ""
+        end
+    end
+end)
+
+-- Auto-reset timer (keeps used words until manual reset or timeout)
+task.spawn(function()
+    while task.wait(10) do
+        if lastWordTime > 0 and tick() - lastWordTime > CONFIG.autoResetTime then
+            print("[AUTO-RESET] Clearing used words due to inactivity")
+            usedWords = {}
+            usedWordsHistory = {}
+            lastWordTime = 0
+            updateTopWords(searchBox.Text)
+        end
+    end
 end)
 
 task.spawn(loadDictionary)
