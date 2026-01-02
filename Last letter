@@ -18,92 +18,30 @@ local CONFIG = {
     autoPlayDelay = 0.3,
     wrongAnswerCheckDelay = 0.8,
     backspaceDelay = 0.4,
+    autoPlayRetryDelay = 0.5,
+    -- Humanization Settings
+    typingSpeedVariation = 0.05,
+    randomDelayMin = 0.2,
+    randomDelayMax = 1.0,
+    typoChance = 0.15,
 }
 
-local commonWords = {
-    ["a"] = true, ["an"] = true, ["the"] = true, ["and"] = true, ["but"] = true, 
-    ["or"] = true, ["nor"] = true, ["for"] = true, ["yet"] = true, ["so"] = true,
-    ["in"] = true, ["on"] = true, ["at"] = true, ["to"] = true, ["of"] = true, 
-    ["by"] = true, ["with"] = true, ["from"] = true, ["up"] = true, ["about"] = true, 
-    ["into"] = true, ["through"] = true, ["after"] = true, ["over"] = true, ["between"] = true,
-    ["out"] = true, ["against"] = true, ["during"] = true, ["without"] = true, ["before"] = true,
-    ["under"] = true, ["around"] = true, ["among"] = true, ["i"] = true, ["you"] = true, 
-    ["he"] = true, ["she"] = true, ["it"] = true, ["we"] = true, ["they"] = true, 
-    ["me"] = true, ["him"] = true, ["her"] = true, ["us"] = true, ["them"] = true,
-    ["my"] = true, ["your"] = true, ["his"] = true, ["its"] = true, ["our"] = true, 
-    ["their"] = true, ["mine"] = true, ["yours"] = true, ["hers"] = true, ["ours"] = true,
-    ["theirs"] = true, ["this"] = true, ["that"] = true, ["these"] = true, ["those"] = true,
-    ["who"] = true, ["what"] = true, ["which"] = true, ["whom"] = true, ["whose"] = true,
-    ["is"] = true, ["am"] = true, ["are"] = true, ["was"] = true, ["were"] = true, 
-    ["be"] = true, ["been"] = true, ["being"] = true, ["have"] = true, ["has"] = true,
-    ["had"] = true, ["having"] = true, ["do"] = true, ["does"] = true, ["did"] = true,
-    ["done"] = true, ["doing"] = true, ["will"] = true, ["would"] = true, ["could"] = true,
-    ["should"] = true, ["may"] = true, ["might"] = true, ["must"] = true, ["can"] = true,
-    ["shall"] = true, ["as"] = true, ["if"] = true, ["than"] = true, ["then"] = true,
-    ["now"] = true, ["just"] = true, ["where"] = true, ["when"] = true, ["why"] = true,
-    ["how"] = true, ["all"] = true, ["each"] = true, ["some"] = true, ["any"] = true,
-    ["many"] = true, ["much"] = true, ["more"] = true, ["most"] = true, ["other"] = true,
-    ["such"] = true, ["no"] = true, ["not"] = true, ["only"] = true, ["own"] = true,
-    ["same"] = true, ["too"] = true, ["very"] = true, ["yes"] = true, ["get"] = true,
-    ["got"] = true, ["go"] = true, ["gone"] = true, ["went"] = true, ["make"] = true,
-    ["made"] = true, ["see"] = true, ["saw"] = true, ["seen"] = true, ["come"] = true,
-    ["came"] = true, ["take"] = true, ["took"] = true, ["know"] = true, ["knew"] = true,
-    ["known"] = true, ["say"] = true, ["said"] = true, ["think"] = true, ["thought"] = true,
-    ["look"] = true, ["looked"] = true, ["want"] = true, ["wanted"] = true, ["use"] = true,
-    ["used"] = true, ["find"] = true, ["found"] = true, ["give"] = true, ["gave"] = true,
-    ["given"] = true, ["tell"] = true, ["told"] = true, ["work"] = true, ["worked"] = true,
-    ["call"] = true, ["called"] = true, ["try"] = true, ["tried"] = true, ["ask"] = true,
-    ["asked"] = true, ["need"] = true, ["needed"] = true, ["feel"] = true, ["felt"] = true,
-    ["become"] = true, ["became"] = true, ["leave"] = true, ["left"] = true, ["put"] = true,
-    ["mean"] = true, ["meant"] = true, ["keep"] = true, ["kept"] = true, ["let"] = true,
-    ["begin"] = true, ["began"] = true, ["seem"] = true, ["seemed"] = true, ["help"] = true,
-    ["helped"] = true, ["show"] = true, ["showed"] = true, ["shown"] = true, ["hear"] = true,
-    ["heard"] = true, ["play"] = true, ["played"] = true, ["run"] = true, ["ran"] = true,
-    ["move"] = true, ["moved"] = true, ["like"] = true, ["liked"] = true, ["live"] = true,
-    ["lived"] = true, ["believe"] = true, ["believed"] = true, ["bring"] = true, ["brought"] = true,
-    ["happen"] = true, ["happened"] = true, ["write"] = true, ["wrote"] = true, ["written"] = true,
-    ["sit"] = true, ["sat"] = true, ["stand"] = true, ["stood"] = true, ["lose"] = true,
-    ["lost"] = true, ["pay"] = true, ["paid"] = true, ["meet"] = true, ["met"] = true,
-    ["include"] = true, ["included"] = true, ["continue"] = true, ["set"] = true, ["learn"] = true,
-    ["learned"] = true, ["change"] = true, ["changed"] = true, ["lead"] = true, ["led"] = true,
-    ["understand"] = true, ["watch"] = true, ["watched"] = true, ["follow"] = true, ["followed"] = true,
-    ["stop"] = true, ["stopped"] = true, ["create"] = true, ["created"] = true, ["speak"] = true,
-    ["spoke"] = true, ["spoken"] = true, ["read"] = true, ["allow"] = true, ["allowed"] = true,
-    ["add"] = true, ["added"] = true, ["spend"] = true, ["spent"] = true, ["grow"] = true,
-    ["grew"] = true, ["grown"] = true, ["open"] = true, ["opened"] = true, ["walk"] = true,
-    ["walked"] = true, ["win"] = true, ["won"] = true, ["offer"] = true, ["offered"] = true,
-    ["remember"] = true, ["love"] = true, ["loved"] = true, ["consider"] = true, ["appear"] = true,
-    ["appeared"] = true, ["buy"] = true, ["bought"] = true, ["wait"] = true, ["waited"] = true,
-    ["serve"] = true, ["served"] = true, ["die"] = true, ["died"] = true, ["send"] = true,
-    ["sent"] = true, ["expect"] = true, ["expected"] = true, ["build"] = true, ["built"] = true,
-    ["stay"] = true, ["stayed"] = true, ["fall"] = true, ["fell"] = true, ["fallen"] = true,
-    ["cut"] = true, ["reach"] = true, ["reached"] = true, ["kill"] = true, ["killed"] = true,
-    ["remain"] = true, ["remained"] = true, ["suggest"] = true, ["raise"] = true, ["raised"] = true,
-    ["pass"] = true, ["passed"] = true, ["sell"] = true, ["sold"] = true, ["require"] = true,
-    ["report"] = true, ["reported"] = true, ["decide"] = true, ["decided"] = true, ["pull"] = true,
-    ["pulled"] = true,
-}
-
-local DICTIONARY_URLS = {
-    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
-    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
-}
-
-local WRONG_ANSWER_IMAGE = "rbxassetid://105102146522745"
-local CORRECT_ANSWER_IMAGE = "rbxassetid://127364693410245"
-
+local commonWords = {}
 local allWords = {}
 local wordsByPrefix = {} 
 local consoleAutoComplete = false
 local uiAutoComplete = false
 local autoPlayEnabled = false
+local useCommonWords = false
+local ignoreUsedWords = true
 local usedWords = {}
-local usedWordsHistory = {} -- NEW: Track usage count and timestamps
+local usedWordsHistory = {}
 local lastWordTime = 0
 local topWords = {}
 local currentPage = 1
 local mainFrameVisible = true
 local configVisible = true
+local resetMenuVisible = false
 local searchDebounce = nil
 local isAutoPlaying = false
 local lastAutoPlayedWord = ""
@@ -112,13 +50,24 @@ local lastWrongTryCount = 0
 local bannedWords = {}
 local isBackspacing = false 
 
+local DICTIONARY_URLS = {
+    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_dictionary.json",
+    "https://raw.githubusercontent.com/mooresource/project-repo/refs/heads/main/long%20ass%20word"
+}
+
+local COMMON_WORDS_URL = "https://raw.githubusercontent.com/first20hours/google-10000-english/refs/heads/master/20k.txt"
+
+local WRONG_ANSWER_IMAGE = "rbxassetid://105102146522745"
+local CORRECT_ANSWER_IMAGE = "rbxassetid://127364693410245"
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "TacticalWordHelper"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = playerGui
 
+-- Main Frame - Reorganized
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 280, 0, 560)
+mainFrame.Size = UDim2.new(0, 300, 0, 640)
 mainFrame.Position = UDim2.new(0, 10, 0, 10)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 mainFrame.BorderColor3 = Color3.fromRGB(100, 100, 100)
@@ -126,19 +75,19 @@ mainFrame.BorderSizePixel = 2
 mainFrame.Parent = screenGui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 25)
+title.Size = UDim2.new(1, 0, 0, 30)
 title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 title.BorderSizePixel = 0
-title.Text = "[ WORD HELPER - PC ] - LShift to hide"
+title.Text = "WORD HELPER - LShift to Hide"
 title.TextColor3 = Color3.fromRGB(200, 200, 200)
 title.Font = Enum.Font.Code
 title.TextSize = 14
 title.Parent = mainFrame
 
 local searchBox = Instance.new("TextBox")
-searchBox.Size = UDim2.new(1, -10, 0, 30)
-searchBox.Position = UDim2.new(0, 5, 0, 35)
+searchBox.Size = UDim2.new(1, -20, 0, 35)
+searchBox.Position = UDim2.new(0, 10, 0, 40)
 searchBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 searchBox.BorderColor3 = Color3.fromRGB(80, 80, 80)
 searchBox.BorderSizePixel = 1
@@ -147,7 +96,7 @@ searchBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
 searchBox.Text = ""
 searchBox.TextColor3 = Color3.fromRGB(200, 200, 200)
 searchBox.Font = Enum.Font.Code
-searchBox.TextSize = 12
+searchBox.TextSize = 13
 searchBox.ClearTextOnFocus = false
 searchBox.Parent = mainFrame
 
@@ -156,64 +105,126 @@ searchPad.PaddingLeft = UDim.new(0, 8)
 searchPad.PaddingRight = UDim.new(0, 8)
 searchPad.Parent = searchBox
 
-local autoLabel = Instance.new("TextLabel")
-autoLabel.Size = UDim2.new(1, -10, 0, 20)
-autoLabel.Position = UDim2.new(0, 5, 0, 75)
-autoLabel.BackgroundTransparency = 1
-autoLabel.Text = "Auto-Fill: OFF"
-autoLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-autoLabel.Font = Enum.Font.Code
-autoLabel.TextSize = 11
-autoLabel.TextXAlignment = Enum.TextXAlignment.Left
-autoLabel.Parent = mainFrame
+-- Status Section
+local statusFrame = Instance.new("Frame")
+statusFrame.Size = UDim2.new(1, -20, 0, 100)
+statusFrame.Position = UDim2.new(0, 10, 0, 85)
+statusFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+statusFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+statusFrame.BorderSizePixel = 1
+statusFrame.Parent = mainFrame
 
-local autoPlayLabel = Instance.new("TextLabel")
-autoPlayLabel.Size = UDim2.new(1, -10, 0, 20)
-autoPlayLabel.Position = UDim2.new(0, 5, 0, 95)
-autoPlayLabel.BackgroundTransparency = 1
-autoPlayLabel.Text = "Auto-Play: OFF"
-autoPlayLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-autoPlayLabel.Font = Enum.Font.Code
-autoPlayLabel.TextSize = 11
-autoPlayLabel.TextXAlignment = Enum.TextXAlignment.Left
-autoPlayLabel.Parent = mainFrame
+local statusTitle = Instance.new("TextLabel")
+statusTitle.Size = UDim2.new(1, 0, 0, 20)
+statusTitle.Position = UDim2.new(0, 0, 0, 0)
+statusTitle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+statusTitle.BorderSizePixel = 0
+statusTitle.Text = "STATUS"
+statusTitle.TextColor3 = Color3.fromRGB(150, 150, 150)
+statusTitle.Font = Enum.Font.Code
+statusTitle.TextSize = 11
+statusTitle.Parent = statusFrame
 
 local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -10, 0, 20)
-statusLabel.Position = UDim2.new(0, 5, 0, 115)
+statusLabel.Size = UDim2.new(1, -10, 0, 18)
+statusLabel.Position = UDim2.new(0, 5, 0, 25)
 statusLabel.BackgroundTransparency = 1
-statusLabel.Text = "Words Loaded: 0 | Platform: PC"
+statusLabel.Text = "Words Loaded: 0"
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 statusLabel.Font = Enum.Font.Code
 statusLabel.TextSize = 11
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-statusLabel.Parent = mainFrame
+statusLabel.Parent = statusFrame
 
 local usageLabel = Instance.new("TextLabel")
-usageLabel.Size = UDim2.new(1, -10, 0, 20)
-usageLabel.Position = UDim2.new(0, 5, 0, 135)
+usageLabel.Size = UDim2.new(1, -10, 0, 18)
+usageLabel.Position = UDim2.new(0, 5, 0, 45)
 usageLabel.BackgroundTransparency = 1
 usageLabel.Text = "Used Words: 0"
 usageLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
 usageLabel.Font = Enum.Font.Code
 usageLabel.TextSize = 11
 usageLabel.TextXAlignment = Enum.TextXAlignment.Left
-usageLabel.Parent = mainFrame
+usageLabel.Parent = statusFrame
 
-local retryLabel = Instance.new("TextLabel")
-retryLabel.Size = UDim2.new(1, -10, 0, 20)
-retryLabel.Position = UDim2.new(0, 5, 0, 155)
-retryLabel.BackgroundTransparency = 1
-retryLabel.Text = "Banned Words: 0"
-retryLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-retryLabel.Font = Enum.Font.Code
-retryLabel.TextSize = 11
-retryLabel.TextXAlignment = Enum.TextXAlignment.Left
-retryLabel.Parent = mainFrame
+local bannedLabel = Instance.new("TextLabel")
+bannedLabel.Size = UDim2.new(1, -10, 0, 18)
+bannedLabel.Position = UDim2.new(0, 5, 0, 65)
+bannedLabel.BackgroundTransparency = 1
+bannedLabel.Text = "Banned Words: 0"
+bannedLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+bannedLabel.Font = Enum.Font.Code
+bannedLabel.TextSize = 11
+bannedLabel.TextXAlignment = Enum.TextXAlignment.Left
+bannedLabel.Parent = statusFrame
 
-local function createButton(text, yPos)
+-- Controls Section
+local controlsFrame = Instance.new("Frame")
+controlsFrame.Size = UDim2.new(1, -20, 0, 165)
+controlsFrame.Position = UDim2.new(0, 10, 0, 195)
+controlsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+controlsFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+controlsFrame.BorderSizePixel = 1
+controlsFrame.Parent = mainFrame
+
+local controlsTitle = Instance.new("TextLabel")
+controlsTitle.Size = UDim2.new(1, 0, 0, 20)
+controlsTitle.Position = UDim2.new(0, 0, 0, 0)
+controlsTitle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+controlsTitle.BorderSizePixel = 0
+controlsTitle.Text = "CONTROLS"
+controlsTitle.TextColor3 = Color3.fromRGB(150, 150, 150)
+controlsTitle.Font = Enum.Font.Code
+controlsTitle.TextSize = 11
+controlsTitle.Parent = controlsFrame
+
+local autoFillLabel = Instance.new("TextLabel")
+autoFillLabel.Size = UDim2.new(1, -10, 0, 18)
+autoFillLabel.Position = UDim2.new(0, 5, 0, 25)
+autoFillLabel.BackgroundTransparency = 1
+autoFillLabel.Text = "Auto Fill: OFF"
+autoFillLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+autoFillLabel.Font = Enum.Font.Code
+autoFillLabel.TextSize = 11
+autoFillLabel.TextXAlignment = Enum.TextXAlignment.Left
+autoFillLabel.Parent = controlsFrame
+
+local autoPlayLabel = Instance.new("TextLabel")
+autoPlayLabel.Size = UDim2.new(1, -10, 0, 18)
+autoPlayLabel.Position = UDim2.new(0, 5, 0, 46)
+autoPlayLabel.BackgroundTransparency = 1
+autoPlayLabel.Text = "Auto Play: OFF"
+autoPlayLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+autoPlayLabel.Font = Enum.Font.Code
+autoPlayLabel.TextSize = 11
+autoPlayLabel.TextXAlignment = Enum.TextXAlignment.Left
+autoPlayLabel.Parent = controlsFrame
+
+local wordModeLabel = Instance.new("TextLabel")
+wordModeLabel.Size = UDim2.new(1, -10, 0, 18)
+wordModeLabel.Position = UDim2.new(0, 5, 0, 67)
+wordModeLabel.BackgroundTransparency = 1
+wordModeLabel.Text = "Word Mode: Default"
+wordModeLabel.TextColor3 = Color3.fromRGB(200, 150, 100)
+wordModeLabel.Font = Enum.Font.Code
+wordModeLabel.TextSize = 11
+wordModeLabel.TextXAlignment = Enum.TextXAlignment.Left
+wordModeLabel.Parent = controlsFrame
+
+local ignoreUsedLabel = Instance.new("TextLabel")
+ignoreUsedLabel.Size = UDim2.new(1, -10, 0, 18)
+ignoreUsedLabel.Position = UDim2.new(0, 5, 0, 88)
+ignoreUsedLabel.BackgroundTransparency = 1
+ignoreUsedLabel.Text = "Ignore Used: ON"
+ignoreUsedLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+ignoreUsedLabel.Font = Enum.Font.Code
+ignoreUsedLabel.TextSize = 11
+ignoreUsedLabel.TextXAlignment = Enum.TextXAlignment.Left
+ignoreUsedLabel.Parent = controlsFrame
+
+local function createButton(text, yPos, parent)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -10, 0, 25)
+    btn.Size = UDim2.new(1, -10, 0, 28)
     btn.Position = UDim2.new(0, 5, 0, yPos)
     btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     btn.BorderColor3 = Color3.fromRGB(100, 100, 100)
@@ -222,17 +233,28 @@ local function createButton(text, yPos)
     btn.TextColor3 = Color3.fromRGB(200, 200, 200)
     btn.Font = Enum.Font.Code
     btn.TextSize = 11
-    btn.Parent = mainFrame
+    btn.Parent = parent
     return btn
 end
 
-local autoBtn = createButton("Toggle Auto-Fill", 185)
-local autoPlayBtn = createButton("Toggle Auto-Play", 220)
-local resetBtn = createButton("Reset Memory", 255)
+local autoFillBtn = createButton("Toggle Auto Fill", 112, controlsFrame)
+local autoPlayBtn = createButton("Toggle Auto Play", 112, controlsFrame)
+autoPlayBtn.Position = UDim2.new(0.5, 3, 0, 112)
+autoPlayBtn.Size = UDim2.new(0.5, -8, 0, 28)
+autoFillBtn.Size = UDim2.new(0.5, -8, 0, 28)
 
+local wordModeBtn = createButton("Toggle Word Mode", 370, mainFrame)
+local ignoreUsedBtn = createButton("Toggle Ignore Used", 370, mainFrame)
+ignoreUsedBtn.Position = UDim2.new(0.5, 3, 0, 370)
+ignoreUsedBtn.Size = UDim2.new(0.5, -13, 0, 28)
+wordModeBtn.Size = UDim2.new(0.5, -13, 0, 28)
+
+local resetBtn = createButton("Reset Options", 405, mainFrame)
+
+-- Results Section
 local resultsFrame = Instance.new("ScrollingFrame")
-resultsFrame.Size = UDim2.new(1, -10, 0, 210)
-resultsFrame.Position = UDim2.new(0, 5, 0, 290)
+resultsFrame.Size = UDim2.new(1, -20, 0, 195)
+resultsFrame.Position = UDim2.new(0, 10, 0, 440)
 resultsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 resultsFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
 resultsFrame.BorderSizePixel = 1
@@ -247,9 +269,10 @@ resLayout.Padding = UDim.new(0, 5)
 resLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 resLayout.Parent = resultsFrame
 
+-- Pagination
 local pageLabel = Instance.new("TextLabel")
-pageLabel.Size = UDim2.new(1, -80, 0, 25)
-pageLabel.Position = UDim2.new(0, 40, 0, 530)
+pageLabel.Size = UDim2.new(1, -90, 0, 25)
+pageLabel.Position = UDim2.new(0, 45, 0, 607)
 pageLabel.BackgroundTransparency = 1
 pageLabel.Text = "PAGE 1"
 pageLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -258,8 +281,8 @@ pageLabel.TextSize = 11
 pageLabel.Parent = mainFrame
 
 local prevBtn = Instance.new("TextButton")
-prevBtn.Size = UDim2.new(0, 30, 0, 25)
-prevBtn.Position = UDim2.new(0, 5, 0, 530)
+prevBtn.Size = UDim2.new(0, 35, 0, 25)
+prevBtn.Position = UDim2.new(0, 5, 0, 607)
 prevBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 prevBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
 prevBtn.BorderSizePixel = 1
@@ -270,8 +293,8 @@ prevBtn.TextSize = 14
 prevBtn.Parent = mainFrame
 
 local nextBtn = Instance.new("TextButton")
-nextBtn.Size = UDim2.new(0, 30, 0, 25)
-nextBtn.Position = UDim2.new(1, -35, 0, 530)
+nextBtn.Size = UDim2.new(0, 35, 0, 25)
+nextBtn.Position = UDim2.new(1, -40, 0, 607)
 nextBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 nextBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
 nextBtn.BorderSizePixel = 1
@@ -281,31 +304,95 @@ nextBtn.Font = Enum.Font.Code
 nextBtn.TextSize = 14
 nextBtn.Parent = mainFrame
 
+-- Reset Menu (Redesigned to match UI)
+local resetFrame = Instance.new("Frame")
+resetFrame.Size = UDim2.new(0, 280, 0, 200)
+resetFrame.Position = UDim2.new(0.5, -140, 0.5, -100)
+resetFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+resetFrame.BorderColor3 = Color3.fromRGB(100, 100, 100)
+resetFrame.BorderSizePixel = 2
+resetFrame.Visible = false
+resetFrame.ZIndex = 10
+resetFrame.Parent = screenGui
+
+local resetTitle = Instance.new("TextLabel")
+resetTitle.Size = UDim2.new(1, 0, 0, 30)
+resetTitle.Position = UDim2.new(0, 0, 0, 0)
+resetTitle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+resetTitle.BorderSizePixel = 0
+resetTitle.Text = "RESET OPTIONS"
+resetTitle.TextColor3 = Color3.fromRGB(200, 200, 200)
+resetTitle.Font = Enum.Font.Code
+resetTitle.TextSize = 14
+resetTitle.ZIndex = 10
+resetTitle.Parent = resetFrame
+
+local function createResetButton(text, yPos)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 0, 32)
+    btn.Position = UDim2.new(0, 10, 0, yPos)
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    btn.BorderSizePixel = 1
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 12
+    btn.ZIndex = 10
+    btn.Parent = resetFrame
+    return btn
+end
+
+local resetUsedBtn = createResetButton("Reset Used Words", 45)
+local resetBannedBtn = createResetButton("Reset Banned Words", 85)
+local resetBothBtn = createResetButton("Reset Both", 125)
+local resetCancelBtn = createResetButton("Cancel", 165)
+
+resetCancelBtn.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
+resetCancelBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
+
+-- Config Frame
 local configFrame = Instance.new("Frame")
-configFrame.Size = UDim2.new(0, 280, 0, 260)
-configFrame.Position = UDim2.new(0, 300, 0, 10)
+configFrame.Size = UDim2.new(0, 300, 0, 640)
+configFrame.Position = UDim2.new(0, 320, 0, 10)
 configFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 configFrame.BorderColor3 = Color3.fromRGB(100, 100, 100)
 configFrame.BorderSizePixel = 2
 configFrame.Parent = screenGui
 
 local configTitle = Instance.new("TextLabel")
-configTitle.Size = UDim2.new(1, 0, 0, 25)
+configTitle.Size = UDim2.new(1, 0, 0, 30)
 configTitle.Position = UDim2.new(0, 0, 0, 0)
 configTitle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 configTitle.BorderSizePixel = 0
-configTitle.Text = "[ CONFIG - PC ] - RShift to hide"
+configTitle.Text = "CONFIG - RShift to Hide"
 configTitle.TextColor3 = Color3.fromRGB(200, 200, 200)
 configTitle.Font = Enum.Font.Code
 configTitle.TextSize = 14
 configTitle.Parent = configFrame
 
+-- Scrolling frame for config
+local configScrollFrame = Instance.new("ScrollingFrame")
+configScrollFrame.Size = UDim2.new(1, 0, 1, -30)
+configScrollFrame.Position = UDim2.new(0, 0, 0, 30)
+configScrollFrame.BackgroundTransparency = 1
+configScrollFrame.BorderSizePixel = 0
+configScrollFrame.ScrollBarThickness = 6
+configScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 255, 100)
+configScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+configScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+configScrollFrame.Parent = configFrame
+
+local configLayout = Instance.new("UIListLayout")
+configLayout.Padding = UDim.new(0, 5)
+configLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+configLayout.Parent = configScrollFrame
+
 local function createSlider(name, yPos, minVal, maxVal, defaultVal, increment, callback)
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -10, 0, 50)
-    container.Position = UDim2.new(0, 5, 0, yPos)
+    container.Size = UDim2.new(1, -20, 0, 55)
     container.BackgroundTransparency = 1
-    container.Parent = configFrame
+    container.Parent = configScrollFrame
     
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1, 0, 0, 18)
@@ -333,7 +420,7 @@ local function createSlider(name, yPos, minVal, maxVal, defaultVal, increment, c
     sliderFill.Parent = sliderBack
     
     local minusBtn = Instance.new("TextButton")
-    minusBtn.Size = UDim2.new(0, 30, 0, 18)
+    minusBtn.Size = UDim2.new(0, 35, 0, 20)
     minusBtn.Position = UDim2.new(0, 0, 0, 32)
     minusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     minusBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
@@ -345,8 +432,8 @@ local function createSlider(name, yPos, minVal, maxVal, defaultVal, increment, c
     minusBtn.Parent = container
     
     local plusBtn = Instance.new("TextButton")
-    plusBtn.Size = UDim2.new(0, 30, 0, 18)
-    plusBtn.Position = UDim2.new(1, -30, 0, 32)
+    plusBtn.Size = UDim2.new(0, 35, 0, 20)
+    plusBtn.Position = UDim2.new(1, -35, 0, 32)
     plusBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     plusBtn.BorderColor3 = Color3.fromRGB(100, 100, 100)
     plusBtn.BorderSizePixel = 1
@@ -406,31 +493,98 @@ local function createSlider(name, yPos, minVal, maxVal, defaultVal, increment, c
     end)
 end
 
-createSlider("Typing Speed", 35, 0.05, 0.5, CONFIG.typingSpeed, 0.05, function(val)
+local function createSectionHeader(text)
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, -20, 0, 25)
+    header.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    header.BorderColor3 = Color3.fromRGB(80, 80, 80)
+    header.BorderSizePixel = 1
+    header.Parent = configScrollFrame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(100, 255, 100)
+    label.Font = Enum.Font.Code
+    label.TextSize = 12
+    label.Parent = header
+    
+    return header
+end
+
+-- General Settings Section
+createSectionHeader("GENERAL SETTINGS")
+
+createSlider("Typing Speed", 40, 0.05, 0.5, CONFIG.typingSpeed, 0.05, function(val)
     CONFIG.typingSpeed = val
 end)
 
-createSlider("Words Per Page", 95, 5, 15, CONFIG.wordsPerPage, 1, function(val)
+createSlider("Words Per Page", 105, 5, 15, CONFIG.wordsPerPage, 1, function(val)
     CONFIG.wordsPerPage = math.floor(val)
 end)
 
-createSlider("Ideal Length", 155, 3, 45, CONFIG.idealLength, 1, function(val)
+createSlider("Ideal Length", 170, 3, 45, CONFIG.idealLength, 1, function(val)
     CONFIG.idealLength = math.floor(val)
     CONFIG.maxLength = math.max(CONFIG.idealLength, CONFIG.maxLength)
 end)
 
-createSlider("Auto-Play Delay", 215, 0.1, 2.0, CONFIG.autoPlayDelay, 0.1, function(val)
+createSlider("Auto Play Delay", 235, 0.1, 2.0, CONFIG.autoPlayDelay, 0.1, function(val)
     CONFIG.autoPlayDelay = val
 end)
 
--- NEW: Enhanced word usage tracking
+createSlider("Wrong Answer Check", 300, 0.3, 2.0, CONFIG.wrongAnswerCheckDelay, 0.1, function(val)
+    CONFIG.wrongAnswerCheckDelay = val
+end)
+
+createSlider("Auto Play Retry Delay", 365, 0.1, 2.0, CONFIG.autoPlayRetryDelay, 0.1, function(val)
+    CONFIG.autoPlayRetryDelay = val
+end)
+
+-- Humanization Section
+createSectionHeader("HUMANIZATION SETTINGS")
+
+createSlider("Speed Variation", 0, 0.0, 0.2, CONFIG.typingSpeedVariation, 0.01, function(val)
+    CONFIG.typingSpeedVariation = val
+end)
+
+createSlider("Random Delay Min", 0, 0.0, 2.0, CONFIG.randomDelayMin, 0.1, function(val)
+    CONFIG.randomDelayMin = val
+    if CONFIG.randomDelayMin > CONFIG.randomDelayMax then
+        CONFIG.randomDelayMax = CONFIG.randomDelayMin
+    end
+end)
+
+createSlider("Random Delay Max", 0, 0.0, 3.0, CONFIG.randomDelayMax, 0.1, function(val)
+    CONFIG.randomDelayMax = val
+    if CONFIG.randomDelayMax < CONFIG.randomDelayMin then
+        CONFIG.randomDelayMin = CONFIG.randomDelayMax
+    end
+end)
+
+createSlider("Typo Chance", 0, 0.0, 0.5, CONFIG.typoChance, 0.05, function(val)
+    CONFIG.typoChance = val
+end)
+
+local function updateCounters()
+    local usedCount = 0
+    for _ in pairs(usedWords) do
+        usedCount = usedCount + 1
+    end
+    usageLabel.Text = "Used Words: " .. usedCount
+    
+    local bannedCount = 0
+    for _ in pairs(bannedWords) do
+        bannedCount = bannedCount + 1
+    end
+    bannedLabel.Text = "Banned Words: " .. bannedCount
+end
+
 local function markWordAsUsed(word)
     local currentTime = tick()
     
-    -- Mark as used
     usedWords[word] = true
     
-    -- Track detailed usage
     if not usedWordsHistory[word] then
         usedWordsHistory[word] = {
             count = 0,
@@ -442,42 +596,9 @@ local function markWordAsUsed(word)
     usedWordsHistory[word].count = usedWordsHistory[word].count + 1
     usedWordsHistory[word].lastUsed = currentTime
     
-    -- Update usage counter
-    local usedCount = 0
-    for _ in pairs(usedWords) do
-        usedCount = usedCount + 1
-    end
-    usageLabel.Text = "Used Words: " .. usedCount
+    updateCounters()
     
-    print("[WORD USED] " .. word .. " (Total uses: " .. usedWordsHistory[word].count .. ")")
-end
-
--- NEW: Better detection of successful word submission
-local function detectSuccessfulSubmission()
-    local success, result = pcall(function()
-        local inGameGui = playerGui:FindFirstChild("InGame")
-        if not inGameGui then return false end
-        
-        local frame = inGameGui:FindFirstChild("Frame")
-        if not frame then return false end
-        
-        local tries = frame:FindFirstChild("Tries")
-        if not tries then return false end
-        
-        -- Check if latest try is correct (green checkmark)
-        for i = 1, 5 do
-            local tryImage = tries:FindFirstChild(tostring(i))
-            if tryImage and tryImage:IsA("ImageLabel") then
-                if tryImage.Image == CORRECT_ANSWER_IMAGE then
-                    return true -- Found a correct answer
-                end
-            end
-        end
-        
-        return false
-    end)
-    
-    return success and result
+    print("[WORD USED] " .. word .. " (Total: " .. usedWordsHistory[word].count .. ")")
 end
 
 local function buildPrefixIndex()
@@ -502,9 +623,7 @@ local function loadFromJSON(content)
         local len = #word
         local lowerWord = word:lower()
         if len >= CONFIG.minLength and len <= CONFIG.maxLength then
-            if len > 20 or not commonWords[lowerWord] then
-                table.insert(allWords, lowerWord)
-            end
+            table.insert(allWords, lowerWord)
         end
     end
     return true
@@ -515,18 +634,39 @@ local function loadFromText(content)
         local len = #word
         local lowerWord = word:lower()
         if len >= CONFIG.minLength and len <= CONFIG.maxLength then
-            if len > 20 or not commonWords[lowerWord] then
-                table.insert(allWords, lowerWord)
-            end
+            table.insert(allWords, lowerWord)
         end
     end
     return #allWords > 0
 end
 
+local function loadCommonWords()
+    print("[LOADING] Common words...")
+    local ok, content = pcall(function() return game:HttpGet(COMMON_WORDS_URL) end)
+    if ok then
+        local count = 0
+        for word in content:gmatch("[^\r\n]+") do
+            local len = #word
+            local lowerWord = word:lower()
+            if len >= CONFIG.minLength and len <= CONFIG.maxLength then
+                commonWords[lowerWord] = true
+                count = count + 1
+            end
+        end
+        print("[LOADED] " .. count .. " common words")
+        return true
+    else
+        print("[ERROR] Failed to load common words")
+        return false
+    end
+end
+
 local function loadDictionary()
     searchBox.PlaceholderText = "LOADING..."
-    statusLabel.Text = "Status: Loading Dictionary..."
+    statusLabel.Text = "Loading Dictionary..."
     statusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+    
+    loadCommonWords()
     
     for i, url in ipairs(DICTIONARY_URLS) do
         local ok, content = pcall(function() return game:HttpGet(url) end)
@@ -538,15 +678,15 @@ local function loadDictionary()
             if loaded then
                 buildPrefixIndex()
                 searchBox.PlaceholderText = "TYPE OR WAIT..."
-                statusLabel.Text = "Words: " .. #allWords .. " | Platform: PC"
+                statusLabel.Text = "Words Loaded: " .. #allWords
                 statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
                 return true
             end
         end
     end
     
-    searchBox.PlaceholderText = "ERROR LOADING"
-    statusLabel.Text = "Status: ERROR"
+    searchBox.PlaceholderText = "ERROR"
+    statusLabel.Text = "Loading Failed"
     statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
     return false
 end
@@ -557,7 +697,7 @@ local function clearCurrentWord()
     end
     
     isBackspacing = true
-    print("[BACKSPACE] Starting deletion...")
+    print("[BACKSPACE] Clearing word...")
     
     task.spawn(function()
         for i = 1, 30 do
@@ -569,15 +709,18 @@ local function clearCurrentWord()
         
         task.wait(CONFIG.backspaceDelay)
         isBackspacing = false
-        print("[BACKSPACE] Deletion completed!")
+        print("[BACKSPACE] Complete")
     end)
 end
 
 local function autoTypeWord(word, currentInput)
-    -- Mark word as about to be used
     local remaining = word:sub(#currentInput + 1)
     
     task.spawn(function()
+        -- Random delay before starting (humanization)
+        local randomDelay = math.random() * (CONFIG.randomDelayMax - CONFIG.randomDelayMin) + CONFIG.randomDelayMin
+        task.wait(randomDelay)
+        
         local cam = workspace.CurrentCamera
         local size = cam.ViewportSize
         local x, y = size.X/2, size.Y/2
@@ -589,9 +732,35 @@ local function autoTypeWord(word, currentInput)
             task.wait()
         end
 
-        for c in remaining:upper():gmatch(".") do
+        for i, c in ipairs(remaining:upper():split("")) do
+            -- Check if we should make a typo (humanization)
+            local shouldTypo = math.random() < CONFIG.typoChance and i > 1
+            
+            if shouldTypo then
+                -- Type a random wrong letter
+                local wrongKeys = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Z", "X", "C", "V", "B", "N", "M"}
+                local wrongKey = wrongKeys[math.random(#wrongKeys)]
+                
+                -- Type wrong key
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[wrongKey], false, game)
+                local typoSpeed = CONFIG.typingSpeed + (math.random() - 0.5) * CONFIG.typingSpeedVariation
+                task.wait(typoSpeed)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[wrongKey], false, game)
+                
+                -- Pause (realization delay)
+                task.wait(0.1 + math.random() * 0.15)
+                
+                -- Delete wrong key
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Backspace, false, game)
+                task.wait(0.05)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Backspace, false, game)
+                task.wait(0.05)
+            end
+            
+            -- Type the correct key with speed variation (humanization)
+            local charSpeed = CONFIG.typingSpeed + (math.random() - 0.5) * CONFIG.typingSpeedVariation
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[c], false, game)
-            task.wait(CONFIG.typingSpeed)
+            task.wait(charSpeed)
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[c], false, game)
         end
         
@@ -599,7 +768,6 @@ local function autoTypeWord(word, currentInput)
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
         
-        -- Mark word as used after typing completes
         task.wait(0.2)
         markWordAsUsed(word)
     end)
@@ -621,11 +789,11 @@ local function displayPage()
         local isTopResult = (i == startIdx)
         local isBanned = bannedWords[word]
         local isUsed = usedWords[word]
+        local isCommon = commonWords[word]
         
         local btn = Instance.new("TextButton")
         btn.Size = UDim2.new(1, -6, 0, isTopResult and 28 or 22)
         
-        -- Color coding: banned = red, used = yellow, top = green, normal = gray
         if isBanned then
             btn.BackgroundColor3 = Color3.fromRGB(60, 30, 30)
             btn.BorderColor3 = Color3.fromRGB(255, 100, 100)
@@ -634,6 +802,10 @@ local function displayPage()
             btn.BackgroundColor3 = Color3.fromRGB(60, 60, 30)
             btn.BorderColor3 = Color3.fromRGB(255, 255, 100)
             btn.TextColor3 = Color3.fromRGB(255, 255, 100)
+        elseif isCommon then
+            btn.BackgroundColor3 = Color3.fromRGB(30, 50, 70)
+            btn.BorderColor3 = Color3.fromRGB(100, 150, 255)
+            btn.TextColor3 = Color3.fromRGB(150, 200, 255)
         elseif isTopResult then
             btn.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
             btn.BorderColor3 = Color3.fromRGB(100, 255, 100)
@@ -646,19 +818,20 @@ local function displayPage()
         
         btn.BorderSizePixel = 1
         
-        -- Display usage count if word has been used
         local displayText = word:upper()
         if isBanned then
-            displayText = displayText .. " [BANNED]"
+            displayText = "[BANNED] " .. displayText
         elseif isUsed and usedWordsHistory[word] then
-            displayText = displayText .. " (x" .. usedWordsHistory[word].count .. ")"
+            displayText = "[USED x" .. usedWordsHistory[word].count .. "] " .. displayText
+        elseif isCommon then
+            displayText = "[COMMON] " .. displayText
         end
         
         btn.Text = displayText
         btn.Font = Enum.Font.Code
         btn.TextSize = isTopResult and 13 or 11
         btn.AutoButtonColor = true
-        btn.TextScaled = #word > 25
+        btn.TextScaled = #displayText > 30
         btn.Parent = resultsFrame
         
         btn.MouseButton1Click:Connect(function()
@@ -698,14 +871,21 @@ local function updateTopWords(input)
         local bBanned = bannedWords[b] or false
         local aUsed = usedWords[a] or false
         local bUsed = usedWords[b] or false
+        local aCommon = commonWords[a] or false
+        local bCommon = commonWords[b] or false
         
-        -- Priority: non-banned > non-used > ideal length
         if aBanned ~= bBanned then
             return not aBanned
         end
         
         if aUsed ~= bUsed then
             return not aUsed
+        end
+        
+        if useCommonWords then
+            if aCommon ~= bCommon then
+                return aCommon
+            end
         end
         
         local lenA, lenB = #a, #b
@@ -717,19 +897,7 @@ local function updateTopWords(input)
 
     currentPage = 1
     displayPage()
-    
-    -- Update counters
-    local bannedCount = 0
-    for _ in pairs(bannedWords) do
-        bannedCount = bannedCount + 1
-    end
-    retryLabel.Text = "Banned Words: " .. bannedCount
-    
-    local usedCount = 0
-    for _ in pairs(usedWords) do
-        usedCount = usedCount + 1
-    end
-    usageLabel.Text = "Used Words: " .. usedCount
+    updateCounters()
 end
 
 local function isMyTurn()
@@ -780,9 +948,28 @@ local function getWrongTryCount()
 end
 
 local function getBestWord(input)
-    for _, word in ipairs(topWords) do
-        if not bannedWords[word] then
-            return word
+    if useCommonWords then
+        for _, word in ipairs(topWords) do
+            if not bannedWords[word] and commonWords[word] then
+                if not ignoreUsedWords or not usedWords[word] then
+                    return word
+                end
+            end
+        end
+        for _, word in ipairs(topWords) do
+            if not bannedWords[word] then
+                if not ignoreUsedWords or not usedWords[word] then
+                    return word
+                end
+            end
+        end
+    else
+        for _, word in ipairs(topWords) do
+            if not bannedWords[word] then
+                if not ignoreUsedWords or not usedWords[word] then
+                    return word
+                end
+            end
         end
     end
     return nil
@@ -803,44 +990,103 @@ searchBox.Focused:Connect(function()
     searchBox.Text = ""
 end)
 
-autoBtn.MouseButton1Click:Connect(function()
+autoFillBtn.MouseButton1Click:Connect(function()
     if consoleAutoComplete then
         consoleAutoComplete = false
         uiAutoComplete = true
-        autoLabel.Text = "Auto-Fill: UI MODE"
-        autoLabel.TextColor3 = Color3.fromRGB(100, 150, 255)
+        autoFillLabel.Text = "Auto Fill: UI"
+        autoFillLabel.TextColor3 = Color3.fromRGB(100, 150, 255)
     elseif uiAutoComplete then
         uiAutoComplete = false
-        autoLabel.Text = "Auto-Fill: OFF"
-        autoLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        autoFillLabel.Text = "Auto Fill: OFF"
+        autoFillLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
     else
         consoleAutoComplete = true
-        autoLabel.Text = "Auto-Fill: CONSOLE"
-        autoLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        autoFillLabel.Text = "Auto Fill: Console"
+        autoFillLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
     end
 end)
 
 autoPlayBtn.MouseButton1Click:Connect(function()
     autoPlayEnabled = not autoPlayEnabled
     if autoPlayEnabled then
-        autoPlayLabel.Text = "Auto-Play: ON"
+        autoPlayLabel.Text = "Auto Play: ON"
         autoPlayLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        -- Disable UI auto-fill when auto-play is enabled to prevent conflicts
+        if uiAutoComplete then
+            uiAutoComplete = false
+            autoFillLabel.Text = "Auto Fill: OFF"
+            autoFillLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+            print("[AUTO PLAY] UI Auto-Fill disabled to prevent conflicts")
+        end
     else
-        autoPlayLabel.Text = "Auto-Play: OFF"
+        autoPlayLabel.Text = "Auto Play: OFF"
         autoPlayLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
     end
 end)
 
+wordModeBtn.MouseButton1Click:Connect(function()
+    useCommonWords = not useCommonWords
+    if useCommonWords then
+        wordModeLabel.Text = "Word Mode: Common"
+        wordModeLabel.TextColor3 = Color3.fromRGB(100, 200, 255)
+        print("[MODE] Common words")
+    else
+        wordModeLabel.Text = "Word Mode: Default"
+        wordModeLabel.TextColor3 = Color3.fromRGB(200, 150, 100)
+        print("[MODE] Default")
+    end
+    updateTopWords(searchBox.Text)
+end)
+
+ignoreUsedBtn.MouseButton1Click:Connect(function()
+    ignoreUsedWords = not ignoreUsedWords
+    if ignoreUsedWords then
+        ignoreUsedLabel.Text = "Ignore Used: ON"
+        ignoreUsedLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        print("[IGNORE] Used words will be skipped in auto play")
+    else
+        ignoreUsedLabel.Text = "Ignore Used: OFF"
+        ignoreUsedLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        print("[IGNORE] Used words can be replayed")
+    end
+end)
+
 resetBtn.MouseButton1Click:Connect(function()
+    resetFrame.Visible = true
+end)
+
+resetUsedBtn.MouseButton1Click:Connect(function()
+    usedWords = {}
+    usedWordsHistory = {}
+    updateCounters()
+    updateTopWords(searchBox.Text)
+    resetFrame.Visible = false
+    print("[RESET] Used words cleared")
+end)
+
+resetBannedBtn.MouseButton1Click:Connect(function()
+    bannedWords = {}
+    updateCounters()
+    updateTopWords(searchBox.Text)
+    resetFrame.Visible = false
+    print("[RESET] Banned words cleared")
+end)
+
+resetBothBtn.MouseButton1Click:Connect(function()
     usedWords = {}
     usedWordsHistory = {}
     bannedWords = {}
     lastWordTime = 0
     lastWrongTryCount = 0
-    usageLabel.Text = "Used Words: 0"
-    retryLabel.Text = "Banned Words: 0"
+    updateCounters()
     updateTopWords(searchBox.Text)
-    print("[RESET] All word memory cleared!")
+    resetFrame.Visible = false
+    print("[RESET] All memory cleared")
+end)
+
+resetCancelBtn.MouseButton1Click:Connect(function()
+    resetFrame.Visible = false
 end)
 
 prevBtn.MouseButton1Click:Connect(function()
@@ -927,7 +1173,6 @@ local function getLettersFromUI()
     return success and result or nil
 end
 
--- Enhanced auto-play monitoring with better word tracking
 task.spawn(function()
     task.wait(2)
     
@@ -937,7 +1182,7 @@ task.spawn(function()
             
             if currentWrongCount > lastWrongTryCount then
                 bannedWords[currentAttemptWord] = true
-                print("[AUTO-PLAY] Word BANNED: " .. currentAttemptWord)
+                print("[AUTO PLAY] Banned: " .. currentAttemptWord)
                 
                 lastWrongTryCount = currentWrongCount
                 
@@ -951,7 +1196,9 @@ task.spawn(function()
                     task.wait(0.1)
                 end
                 
-                print("[AUTO-PLAY] Backspace completed, searching for new word...")
+                task.wait(CONFIG.autoPlayRetryDelay)
+                
+                print("[AUTO PLAY] Searching for new word...")
                 
                 local letters = getLettersFromUI()
                 if letters and isMyTurn() then
@@ -959,11 +1206,11 @@ task.spawn(function()
                     local newBestWord = getBestWord(letters)
                     
                     if newBestWord then
-                        print("[AUTO-PLAY] Retrying with: " .. newBestWord)
+                        print("[AUTO PLAY] Retrying: " .. newBestWord)
                         currentAttemptWord = newBestWord
                         autoTypeWord(newBestWord, letters)
                     else
-                        print("[AUTO-PLAY] No valid words left!")
+                        print("[AUTO PLAY] No valid words")
                         isAutoPlaying = false
                         currentAttemptWord = ""
                     end
@@ -976,7 +1223,6 @@ task.spawn(function()
     end
 end)
 
--- Main auto-play loop with word tracking
 task.spawn(function()
     local lastDetectedLetters = ""
     local wasMyTurn = false
@@ -998,24 +1244,30 @@ task.spawn(function()
                 if currentLetters and currentLetters ~= "" and currentLetters ~= lastDetectedLetters then
                     lastDetectedLetters = currentLetters
                     lastWordTime = tick()
-                    searchBox.Text = currentLetters
+                    
+                    -- Only update search box if not in auto-play mode
+                    if not autoPlayEnabled then
+                        searchBox.Text = currentLetters
+                    end
                     
                     if autoPlayEnabled and not isAutoPlaying then
                         isAutoPlaying = true
+                        updateTopWords(currentLetters)
                         task.wait(CONFIG.autoPlayDelay)
                         
-                        if isMyTurn() and searchBox.Text == currentLetters then
+                        if isMyTurn() then
                             local bestWord = getBestWord(currentLetters)
                             if bestWord and bestWord ~= lastAutoPlayedWord then
                                 lastAutoPlayedWord = bestWord
                                 currentAttemptWord = bestWord
-                                print("[AUTO-PLAY] Attempting: " .. bestWord)
+                                local modeText = useCommonWords and "Common" or "Default"
+                                print("[AUTO PLAY] Attempting: " .. bestWord .. " [" .. modeText .. "]")
                                 autoTypeWord(bestWord, currentLetters)
                                 
                                 task.wait(CONFIG.wrongAnswerCheckDelay)
                                 
                                 if not isMyTurn() then
-                                    print("[AUTO-PLAY] Success! Turn ended.")
+                                    print("[AUTO PLAY] Success")
                                     isAutoPlaying = false
                                     currentAttemptWord = ""
                                     searchBox.Text = ""
@@ -1051,11 +1303,10 @@ task.spawn(function()
     end
 end)
 
--- Auto-reset timer (keeps used words until manual reset or timeout)
 task.spawn(function()
     while task.wait(10) do
         if lastWordTime > 0 and tick() - lastWordTime > CONFIG.autoResetTime then
-            print("[AUTO-RESET] Clearing used words due to inactivity")
+            print("[AUTO RESET] Inactivity timeout")
             usedWords = {}
             usedWordsHistory = {}
             lastWordTime = 0
