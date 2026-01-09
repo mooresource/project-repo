@@ -291,17 +291,56 @@ local ESP_Table = {}
 
 function ESP.createESP()
     return {
-        BoxTL = Drawing.new("Line"), BoxTR = Drawing.new("Line"), BoxBL = Drawing.new("Line"), BoxBR = Drawing.new("Line"),
-        BoxTL2 = Drawing.new("Line"), BoxTR2 = Drawing.new("Line"), BoxBL2 = Drawing.new("Line"), BoxBR2 = Drawing.new("Line"),
-        Name = Drawing.new("Text"), Distance = Drawing.new("Text"), HealthText = Drawing.new("Text"),
-        HealthBar = Drawing.new("Line"), HealthBg = Drawing.new("Line"), Tracer = Drawing.new("Line"), Dot = Drawing.new("Circle")
+        -- Main box (full outline)
+        BoxOutline = Drawing.new("Square"),
+        BoxMain = Drawing.new("Square"),
+        
+        -- Corner accents
+        CornerTL1 = Drawing.new("Line"), CornerTL2 = Drawing.new("Line"),
+        CornerTR1 = Drawing.new("Line"), CornerTR2 = Drawing.new("Line"),
+        CornerBL1 = Drawing.new("Line"), CornerBL2 = Drawing.new("Line"),
+        CornerBR1 = Drawing.new("Line"), CornerBR2 = Drawing.new("Line"),
+        
+        -- Text elements
+        Name = Drawing.new("Text"),
+        NameShadow = Drawing.new("Text"),
+        Distance = Drawing.new("Text"),
+        HealthText = Drawing.new("Text"),
+        WeaponText = Drawing.new("Text"),
+        
+        -- Health bar system
+        HealthBarBg = Drawing.new("Square"),
+        HealthBarMain = Drawing.new("Square"),
+        HealthBarOutline = Drawing.new("Square"),
+        
+        -- Armor bar
+        ArmorBarBg = Drawing.new("Square"),
+        ArmorBarMain = Drawing.new("Square"),
+        
+        -- Tracer and effects
+        Tracer = Drawing.new("Line"),
+        HeadDot = Drawing.new("Circle"),
+        HeadDotOutline = Drawing.new("Circle"),
+        
+        -- Skeleton lines
+        SkeletonLines = {}
     }
 end
 
 function ESP.update()
     for _, p in pairs(Players:GetPlayers()) do
         if not _G.Config.Esp or p == LP then
-            if ESP_Table[p] then for _, d in pairs(ESP_Table[p]) do d.Visible = false end end
+            if ESP_Table[p] then 
+                for _, d in pairs(ESP_Table[p]) do 
+                    if typeof(d) == "table" then
+                        for _, line in pairs(d) do
+                            line.Visible = false
+                        end
+                    else
+                        d.Visible = false 
+                    end
+                end 
+            end
         else
             local show = Utilities.isEnemy(p) or (_G.Config.EspTeamMode ~= "Enemies")
             if show and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
@@ -309,149 +348,310 @@ function ESP.update()
                 local data = ESP_Table[p]
                 local root = p.Character.HumanoidRootPart
                 local head = p.Character:FindFirstChild("Head")
+                local humanoid = p.Character.Humanoid
                 local pos, vis = Camera:WorldToViewportPoint(root.Position)
+                
                 if vis and pos.Z > 0 then
-                    local color = Utilities.isEnemy(p) and _G.Config.EnemyColor or _G.Config.TeammateColor
-                    local distance = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") and (LP.Character.HumanoidRootPart.Position - root.Position).Magnitude or 0
-                    local alpha = math.clamp(1 - (distance / 500), 0.3, 1)
-                    local size = math.clamp(2200 / pos.Z, 16, 80)
-                    local cornerLen = size * 0.25
+                    local isEnemy = Utilities.isEnemy(p)
+                    local color = isEnemy and _G.Config.EnemyColor or _G.Config.TeammateColor
+                    local accentColor = isEnemy and Color3.fromRGB(255, 75, 75) or Color3.fromRGB(75, 150, 255)
                     
+                    local distance = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart") 
+                        and (LP.Character.HumanoidRootPart.Position - root.Position).Magnitude or 0
+                    local alpha = math.clamp(1 - (distance / 600), 0.4, 1)
+                    local size = math.clamp(2400 / pos.Z, 18, 90)
+                    
+                    -- Box dimensions
+                    local boxW = size
+                    local boxH = size * 1.8
+                    local boxX = pos.X - boxW/2
+                    local boxY = pos.Y - boxH * 0.52
+                    
+                    -- Modern box with outline
                     if _G.Config.EspBoxes then
-                        local x, y = pos.X - size/2, pos.Y - size * 0.85
-                        local w, h = size, size * 1.7
-                        local thick = 2
-                        data.BoxTL.Visible, data.BoxTL2.Visible = true, true
-                        data.BoxTL.From, data.BoxTL.To = Vector2.new(x, y), Vector2.new(x + cornerLen, y)
-                        data.BoxTL2.From, data.BoxTL2.To = Vector2.new(x, y), Vector2.new(x, y + cornerLen)
-                        data.BoxTL.Color, data.BoxTL2.Color = color, color
-                        data.BoxTL.Thickness, data.BoxTL2.Thickness = thick, thick
-                        data.BoxTL.Transparency, data.BoxTL2.Transparency = alpha, alpha
-                        data.BoxTR.Visible, data.BoxTR2.Visible = true, true
-                        data.BoxTR.From, data.BoxTR.To = Vector2.new(x + w - cornerLen, y), Vector2.new(x + w, y)
-                        data.BoxTR2.From, data.BoxTR2.To = Vector2.new(x + w, y), Vector2.new(x + w, y + cornerLen)
-                        data.BoxTR.Color, data.BoxTR2.Color = color, color
-                        data.BoxTR.Thickness, data.BoxTR2.Thickness = thick, thick
-                        data.BoxTR.Transparency, data.BoxTR2.Transparency = alpha, alpha
-                        data.BoxBL.Visible, data.BoxBL2.Visible = true, true
-                        data.BoxBL.From, data.BoxBL.To = Vector2.new(x, y + h), Vector2.new(x + cornerLen, y + h)
-                        data.BoxBL2.From, data.BoxBL2.To = Vector2.new(x, y + h - cornerLen), Vector2.new(x, y + h)
-                        data.BoxBL.Color, data.BoxBL2.Color = color, color
-                        data.BoxBL.Thickness, data.BoxBL2.Thickness = thick, thick
-                        data.BoxBL.Transparency, data.BoxBL2.Transparency = alpha, alpha
-                        data.BoxBR.Visible, data.BoxBR2.Visible = true, true
-                        data.BoxBR.From, data.BoxBR.To = Vector2.new(x + w - cornerLen, y + h), Vector2.new(x + w, y + h)
-                        data.BoxBR2.From, data.BoxBR2.To = Vector2.new(x + w, y + h - cornerLen), Vector2.new(x + w, y + h)
-                        data.BoxBR.Color, data.BoxBR2.Color = color, color
-                        data.BoxBR.Thickness, data.BoxBR2.Thickness = thick, thick
-                        data.BoxBR.Transparency, data.BoxBR2.Transparency = alpha, alpha
+                        -- Outer outline (darker)
+                        data.BoxOutline.Visible = true
+                        data.BoxOutline.Size = Vector2.new(boxW + 4, boxH + 4)
+                        data.BoxOutline.Position = Vector2.new(boxX - 2, boxY - 2)
+                        data.BoxOutline.Color = Color3.new(0, 0, 0)
+                        data.BoxOutline.Thickness = 3
+                        data.BoxOutline.Transparency = alpha * 0.8
+                        data.BoxOutline.Filled = false
+                        
+                        -- Main box
+                        data.BoxMain.Visible = true
+                        data.BoxMain.Size = Vector2.new(boxW, boxH)
+                        data.BoxMain.Position = Vector2.new(boxX, boxY)
+                        data.BoxMain.Color = color
+                        data.BoxMain.Thickness = 1
+                        data.BoxMain.Transparency = alpha
+                        data.BoxMain.Filled = false
+                        
+                        -- Corner accents (CS2 style)
+                        local cornerLen = boxW * 0.2
+                        local cornerThick = 2.5
+                        
+                        -- Top-left corners
+                        data.CornerTL1.Visible, data.CornerTL2.Visible = true, true
+                        data.CornerTL1.From = Vector2.new(boxX - 1, boxY - 1)
+                        data.CornerTL1.To = Vector2.new(boxX + cornerLen, boxY - 1)
+                        data.CornerTL2.From = Vector2.new(boxX - 1, boxY - 1)
+                        data.CornerTL2.To = Vector2.new(boxX - 1, boxY + cornerLen)
+                        data.CornerTL1.Color, data.CornerTL2.Color = accentColor, accentColor
+                        data.CornerTL1.Thickness, data.CornerTL2.Thickness = cornerThick, cornerThick
+                        data.CornerTL1.Transparency, data.CornerTL2.Transparency = alpha, alpha
+                        
+                        -- Top-right corners
+                        data.CornerTR1.Visible, data.CornerTR2.Visible = true, true
+                        data.CornerTR1.From = Vector2.new(boxX + boxW - cornerLen, boxY - 1)
+                        data.CornerTR1.To = Vector2.new(boxX + boxW + 1, boxY - 1)
+                        data.CornerTR2.From = Vector2.new(boxX + boxW + 1, boxY - 1)
+                        data.CornerTR2.To = Vector2.new(boxX + boxW + 1, boxY + cornerLen)
+                        data.CornerTR1.Color, data.CornerTR2.Color = accentColor, accentColor
+                        data.CornerTR1.Thickness, data.CornerTR2.Thickness = cornerThick, cornerThick
+                        data.CornerTR1.Transparency, data.CornerTR2.Transparency = alpha, alpha
+                        
+                        -- Bottom-left corners
+                        data.CornerBL1.Visible, data.CornerBL2.Visible = true, true
+                        data.CornerBL1.From = Vector2.new(boxX - 1, boxY + boxH + 1)
+                        data.CornerBL1.To = Vector2.new(boxX + cornerLen, boxY + boxH + 1)
+                        data.CornerBL2.From = Vector2.new(boxX - 1, boxY + boxH - cornerLen)
+                        data.CornerBL2.To = Vector2.new(boxX - 1, boxY + boxH + 1)
+                        data.CornerBL1.Color, data.CornerBL2.Color = accentColor, accentColor
+                        data.CornerBL1.Thickness, data.CornerBL2.Thickness = cornerThick, cornerThick
+                        data.CornerBL1.Transparency, data.CornerBL2.Transparency = alpha, alpha
+                        
+                        -- Bottom-right corners
+                        data.CornerBR1.Visible, data.CornerBR2.Visible = true, true
+                        data.CornerBR1.From = Vector2.new(boxX + boxW - cornerLen, boxY + boxH + 1)
+                        data.CornerBR1.To = Vector2.new(boxX + boxW + 1, boxY + boxH + 1)
+                        data.CornerBR2.From = Vector2.new(boxX + boxW + 1, boxY + boxH - cornerLen)
+                        data.CornerBR2.To = Vector2.new(boxX + boxW + 1, boxY + boxH + 1)
+                        data.CornerBR1.Color, data.CornerBR2.Color = accentColor, accentColor
+                        data.CornerBR1.Thickness, data.CornerBR2.Thickness = cornerThick, cornerThick
+                        data.CornerBR1.Transparency, data.CornerBR2.Transparency = alpha, alpha
                     else
-                        data.BoxTL.Visible, data.BoxTL2.Visible = false, false
-                        data.BoxTR.Visible, data.BoxTR2.Visible = false, false
-                        data.BoxBL.Visible, data.BoxBL2.Visible = false, false
-                        data.BoxBR.Visible, data.BoxBR2.Visible = false, false
+                        data.BoxOutline.Visible = false
+                        data.BoxMain.Visible = false
+                        data.CornerTL1.Visible, data.CornerTL2.Visible = false, false
+                        data.CornerTR1.Visible, data.CornerTR2.Visible = false, false
+                        data.CornerBL1.Visible, data.CornerBL2.Visible = false, false
+                        data.CornerBR1.Visible, data.CornerBR2.Visible = false, false
                     end
                     
-                    data.Name.Visible = _G.Config.EspNames
-                    data.Name.Text = p.Name
-                    data.Name.Size = math.clamp(size / 4, 13, 16)
-                    data.Name.Center = true
-                    data.Name.Outline = true
-                    data.Name.OutlineColor = Color3.new(0, 0, 0)
-                    data.Name.Color = Color3.new(1, 1, 1)
-                    data.Name.Transparency = alpha
-                    data.Name.Font = 2
-                    data.Name.Position = Vector2.new(pos.X, pos.Y - size * 0.85 - 20)
+                    -- Name with shadow (CS2 style)
+                    if _G.Config.EspNames then
+                        local nameSize = math.clamp(size / 3.5, 13, 18)
+                        local nameY = boxY - nameSize - 6
+                        
+                        -- Shadow
+                        data.NameShadow.Visible = true
+                        data.NameShadow.Text = p.Name
+                        data.NameShadow.Size = nameSize
+                        data.NameShadow.Center = true
+                        data.NameShadow.Outline = false
+                        data.NameShadow.Color = Color3.new(0, 0, 0)
+                        data.NameShadow.Transparency = alpha * 0.8
+                        data.NameShadow.Font = 3
+                        data.NameShadow.Position = Vector2.new(pos.X + 1, nameY + 1)
+                        
+                        -- Main text
+                        data.Name.Visible = true
+                        data.Name.Text = p.Name
+                        data.Name.Size = nameSize
+                        data.Name.Center = true
+                        data.Name.Outline = false
+                        data.Name.Color = Color3.new(1, 1, 1)
+                        data.Name.Transparency = alpha
+                        data.Name.Font = 3
+                        data.Name.Position = Vector2.new(pos.X, nameY)
+                    else
+                        data.Name.Visible = false
+                        data.NameShadow.Visible = false
+                    end
                     
+                    -- CS2-style health bar (left side)
                     if _G.Config.EspHealthBar then
-                        local hp = p.Character.Humanoid.Health / p.Character.Humanoid.MaxHealth
-                        local barH = size * 1.7
-                        local barX = pos.X - size/2 - 6
-                        local barY = pos.Y - size * 0.85
-                        data.HealthBg.Visible = true
-                        data.HealthBg.From = Vector2.new(barX, barY)
-                        data.HealthBg.To = Vector2.new(barX, barY + barH)
-                        data.HealthBg.Color = Color3.new(0.1, 0.1, 0.1)
-                        data.HealthBg.Thickness = 4
-                        data.HealthBg.Transparency = 0.7
-                        data.HealthBar.Visible = true
-                        data.HealthBar.From = Vector2.new(barX, barY + barH * (1 - hp))
-                        data.HealthBar.To = Vector2.new(barX, barY + barH)
-                        data.HealthBar.Color = Color3.fromRGB(math.floor(255 * (1 - hp)), math.floor(200 * hp), 0)
-                        data.HealthBar.Thickness = 4
-                        data.HealthBar.Transparency = alpha
+                        local hp = humanoid.Health / humanoid.MaxHealth
+                        local barW = 3
+                        local barH = boxH
+                        local barX = boxX - 8
+                        local barY = boxY
+                        
+                        -- Background
+                        data.HealthBarBg.Visible = true
+                        data.HealthBarBg.Size = Vector2.new(barW, barH)
+                        data.HealthBarBg.Position = Vector2.new(barX, barY)
+                        data.HealthBarBg.Color = Color3.new(0.1, 0.1, 0.1)
+                        data.HealthBarBg.Filled = true
+                        data.HealthBarBg.Transparency = 0.6
+                        
+                        -- Outline
+                        data.HealthBarOutline.Visible = true
+                        data.HealthBarOutline.Size = Vector2.new(barW + 2, barH + 2)
+                        data.HealthBarOutline.Position = Vector2.new(barX - 1, barY - 1)
+                        data.HealthBarOutline.Color = Color3.new(0, 0, 0)
+                        data.HealthBarOutline.Filled = false
+                        data.HealthBarOutline.Thickness = 1
+                        data.HealthBarOutline.Transparency = alpha * 0.7
+                        
+                        -- Health gradient (green to red)
+                        local healthColor
+                        if hp > 0.6 then
+                            healthColor = Color3.fromRGB(100, 255, 100)
+                        elseif hp > 0.3 then
+                            healthColor = Color3.fromRGB(255, 200, 50)
+                        else
+                            healthColor = Color3.fromRGB(255, 50, 50)
+                        end
+                        
+                        data.HealthBarMain.Visible = true
+                        data.HealthBarMain.Size = Vector2.new(barW, barH * hp)
+                        data.HealthBarMain.Position = Vector2.new(barX, barY + barH * (1 - hp))
+                        data.HealthBarMain.Color = healthColor
+                        data.HealthBarMain.Filled = true
+                        data.HealthBarMain.Transparency = alpha
+                        
+                        -- Health text
                         if hp < 1 then
                             data.HealthText.Visible = true
                             data.HealthText.Text = tostring(math.floor(hp * 100))
-                            data.HealthText.Size = 11
+                            data.HealthText.Size = 12
                             data.HealthText.Center = false
                             data.HealthText.Outline = true
                             data.HealthText.OutlineColor = Color3.new(0, 0, 0)
-                            data.HealthText.Color = Color3.new(1, 1, 1)
+                            data.HealthText.Color = healthColor
                             data.HealthText.Transparency = alpha
                             data.HealthText.Font = 2
-                            data.HealthText.Position = Vector2.new(barX - 20, barY + barH * (1 - hp) - 6)
+                            data.HealthText.Position = Vector2.new(barX - 24, barY + barH * (1 - hp) - 6)
                         else
                             data.HealthText.Visible = false
                         end
                     else
-                        data.HealthBar.Visible, data.HealthBg.Visible, data.HealthText.Visible = false, false, false
+                        data.HealthBarBg.Visible = false
+                        data.HealthBarMain.Visible = false
+                        data.HealthBarOutline.Visible = false
+                        data.HealthText.Visible = false
                     end
                     
+                    -- Distance indicator
                     if _G.Config.EspDistance then
                         data.Distance.Visible = true
-                        data.Distance.Text = math.floor(distance) .. "m"
-                        data.Distance.Size = math.clamp(size / 5, 11, 13)
+                        data.Distance.Text = string.format("%dm", math.floor(distance))
+                        data.Distance.Size = math.clamp(size / 4.5, 11, 14)
                         data.Distance.Center = true
                         data.Distance.Outline = true
                         data.Distance.OutlineColor = Color3.new(0, 0, 0)
-                        data.Distance.Color = Color3.fromRGB(200, 200, 200)
+                        data.Distance.Color = Color3.fromRGB(220, 220, 220)
                         data.Distance.Transparency = alpha
                         data.Distance.Font = 2
-                        data.Distance.Position = Vector2.new(pos.X, pos.Y + size * 0.85 + 8)
+                        data.Distance.Position = Vector2.new(pos.X, boxY + boxH + 4)
                     else
                         data.Distance.Visible = false
                     end
                     
+                    -- Weapon text (if you want to add this feature)
+                    if _G.Config.EspWeapon then
+                        local weapon = p.Character:FindFirstChildOfClass("Tool")
+                        if weapon then
+                            data.WeaponText.Visible = true
+                            data.WeaponText.Text = weapon.Name
+                            data.WeaponText.Size = 11
+                            data.WeaponText.Center = true
+                            data.WeaponText.Outline = true
+                            data.WeaponText.OutlineColor = Color3.new(0, 0, 0)
+                            data.WeaponText.Color = Color3.fromRGB(200, 200, 255)
+                            data.WeaponText.Transparency = alpha
+                            data.WeaponText.Font = 2
+                            data.WeaponText.Position = Vector2.new(pos.X, boxY + boxH + 18)
+                        else
+                            data.WeaponText.Visible = false
+                        end
+                    else
+                        data.WeaponText.Visible = false
+                    end
+                    
+                    -- Tracers (from bottom center)
                     if _G.Config.EspTracers then
                         data.Tracer.Visible = true
                         data.Tracer.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
-                        data.Tracer.To = Vector2.new(pos.X, pos.Y)
-                        data.Tracer.Color = color
-                        data.Tracer.Thickness = 1.5
-                        data.Tracer.Transparency = alpha * 0.5
+                        data.Tracer.To = Vector2.new(pos.X, boxY + boxH)
+                        data.Tracer.Color = accentColor
+                        data.Tracer.Thickness = 1.2
+                        data.Tracer.Transparency = alpha * 0.4
                     else
                         data.Tracer.Visible = false
                     end
                     
+                    -- Head dot with outline
                     if _G.Config.EspHeadDot and head then
                         local hPos, hVis = Camera:WorldToViewportPoint(head.Position)
                         if hVis and hPos.Z > 0 then
-                            data.Dot.Visible = true
-                            data.Dot.Radius = math.clamp(size / 12, 3, 6)
-                            data.Dot.Position = Vector2.new(hPos.X, hPos.Y)
-                            data.Dot.Color = color
-                            data.Dot.Filled = true
-                            data.Dot.Transparency = alpha
-                            data.Dot.Thickness = 1
+                            local dotSize = math.clamp(size / 10, 4, 8)
+                            
+                            -- Outline
+                            data.HeadDotOutline.Visible = true
+                            data.HeadDotOutline.Radius = dotSize + 1
+                            data.HeadDotOutline.Position = Vector2.new(hPos.X, hPos.Y)
+                            data.HeadDotOutline.Color = Color3.new(0, 0, 0)
+                            data.HeadDotOutline.Filled = true
+                            data.HeadDotOutline.Transparency = alpha * 0.8
+                            
+                            -- Main dot
+                            data.HeadDot.Visible = true
+                            data.HeadDot.Radius = dotSize
+                            data.HeadDot.Position = Vector2.new(hPos.X, hPos.Y)
+                            data.HeadDot.Color = accentColor
+                            data.HeadDot.Filled = true
+                            data.HeadDot.Transparency = alpha
                         else
-                            data.Dot.Visible = false
+                            data.HeadDot.Visible = false
+                            data.HeadDotOutline.Visible = false
                         end
                     else
-                        data.Dot.Visible = false
+                        data.HeadDot.Visible = false
+                        data.HeadDotOutline.Visible = false
                     end
                 else
-                    for _, d in pairs(data) do d.Visible = false end
+                    -- Hide all when not visible
+                    for k, d in pairs(data) do
+                        if typeof(d) == "table" then
+                            for _, line in pairs(d) do
+                                line.Visible = false
+                            end
+                        else
+                            d.Visible = false
+                        end
+                    end
                 end
             elseif ESP_Table[p] then
-                for _, d in pairs(ESP_Table[p]) do d.Visible = false end
+                for k, d in pairs(ESP_Table[p]) do
+                    if typeof(d) == "table" then
+                        for _, line in pairs(d) do
+                            line.Visible = false
+                        end
+                    else
+                        d.Visible = false
+                    end
+                end
             end
         end
     end
     
+    -- Cleanup disconnected players
     for p, data in pairs(ESP_Table) do
         if not p or not p.Parent or not Players:FindFirstChild(p.Name) then
-            for _, d in pairs(data) do d.Visible = false d:Remove() end
+            for k, d in pairs(data) do
+                if typeof(d) == "table" then
+                    for _, line in pairs(d) do
+                        line.Visible = false
+                        line:Remove()
+                    end
+                else
+                    d.Visible = false
+                    d:Remove()
+                end
+            end
             ESP_Table[p] = nil
         end
     end
