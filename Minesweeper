@@ -1,0 +1,146 @@
+local player = game.Players.LocalPlayer
+local RunService = game:GetService("RunService")
+
+local calculationMode = "euler"
+local solveFromNearest = true
+local calculateDelay = 0.5
+local solvingDistance = 50
+
+local lastCalcTime = 0
+local neighborCache = {}
+
+local function isCellOpen(part)
+    if not part or not part.Parent then return true end
+    local isBeige = (part.Color.R > 0.7 and part.Color.G > 0.7 and part.Color.B < 0.6)
+    return part.Transparency > 0.5 or isBeige or part:FindFirstChild("NumberGui")
+end
+
+local function isWithinRange(pos)
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return true end
+    return (pos - root.Position).Magnitude <= solvingDistance
+end
+
+local function sortByDistance(data)
+    if not solveFromNearest then return data end
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return data end
+    table.sort(data, function(a, b)
+        return (a.obj.Position - root.Position).Magnitude < (b.obj.Position - root.Position).Magnitude
+    end)
+    return data
+end
+
+local function getSolverData()
+    local folder = workspace:FindFirstChild("Flag") and workspace.Flag:FindFirstChild("Parts")
+    if not folder then return {} end
+    local numberData = {}
+    local allParts = folder:GetChildren()
+    for _, cell in ipairs(allParts) do
+        if not isCellOpen(cell) or not isWithinRange(cell.Position) then continue end
+        local label = cell:FindFirstChild("NumberGui") and cell.NumberGui:FindFirstChildOfClass("TextLabel")
+        local val = (label and tonumber(label.Text)) or 0
+        if not neighborCache[cell] then
+            local nbs = {}
+            for _, n in ipairs(allParts) do
+                if n ~= cell and (n.Position - cell.Position).Magnitude < (cell.Size.X * 1.8) then
+                    table.insert(nbs, n)
+                end
+            end
+            neighborCache[cell] = nbs
+        end
+        local hidden, mines = {}, 0
+        for _, n in ipairs(neighborCache[cell]) do
+            if not isCellOpen(n) then
+                if n.Color == Color3.new(0,0,0) then
+                    mines = mines + 1
+                else
+                    table.insert(hidden, n)
+                end
+            end
+        end
+        if #hidden > 0 or val == 0 then
+            table.insert(numberData, {obj = cell, eVal = val - mines, hidden = hidden})
+        end
+    end
+    return sortByDistance(numberData)
+end
+
+local function prioritizeNearbySolutions(safeQueue, mineQueue)
+    if not solveFromNearest then return safeQueue, mineQueue end
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return safeQueue, mineQueue end
+    table.sort(safeQueue, function(a, b)
+        return (a.Position - root.Position).Magnitude < (b.Position - root.Position).Magnitude
+    end)
+    table.sort(mineQueue, function(a, b)
+        return (a.Position - root.Position).Magnitude < (b.Position - root.Position).Magnitude
+    end)
+    return safeQueue, mineQueue
+end
+
+local function mainLoop()
+    if tick() - lastCalcTime < calculateDelay then return end
+    lastCalcTime = tick()
+    local data = getSolverData()
+    if #data == 0 then return end
+    local safeQueue, mineQueue = {}, {}
+    local processLimit = #data
+    for i = 1, processLimit do
+        for j = 1, processLimit do
+            if i ~= j then
+                local d1, d2 = data[i], data[j]
+                if (d1.obj.Position - d2.obj.Position).Magnitude < 12 then
+                    local s1, s2 = d1.hidden, d2.hidden
+                    local isSubset = true
+                    for _, x in ipairs(s1) do
+                        local found = false
+                        for _, y in ipairs(s2) do
+                            if x == y then found = true; break end
+                        end
+                        if not found then isSubset = false; break end
+                    end
+                    if isSubset and #s2 > #s1 then
+                        local diffMines = d2.eVal - d1.eVal
+                        local diffCells = {}
+                        for _, x in ipairs(s2) do
+                            local inS1 = false
+                            for _, y in ipairs(s1) do
+                                if x == y then inS1 = true; break end
+                            end
+                            if not inS1 then table.insert(diffCells, x) end
+                        end
+                        if diffMines == 0 then
+                            for _, n in ipairs(diffCells) do table.insert(safeQueue, n) end
+                        elseif diffMines == #diffCells then
+                            for _, n in ipairs(diffCells) do table.insert(mineQueue, n) end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    local basicSafe, basicMines = {}, {}
+    for i = 1, processLimit do
+        local d = data[i]
+        if #d.hidden > 0 then
+            if #d.hidden == d.eVal then
+                for _, n in ipairs(d.hidden) do table.insert(basicMines, n) end
+            elseif d.eVal <= 0 then
+                for _, n in ipairs(d.hidden) do table.insert(basicSafe, n) end
+            end
+        end
+    end
+    safeQueue, mineQueue = prioritizeNearbySolutions(safeQueue, mineQueue)
+    basicSafe, basicMines = prioritizeNearbySolutions(basicSafe, basicMines)
+    local finalMines = (calculationMode == "euler" and #mineQueue > 0) and mineQueue or basicMines
+    local finalSafe = (calculationMode == "euler" and #safeQueue > 0) and safeQueue or basicSafe
+    for _, m in ipairs(finalMines) do m.Color = Color3.new(0, 0, 0) end
+    for _, s in ipairs(finalSafe) do s.Color = Color3.new(1, 1, 1) end
+end
+
+RunService.Heartbeat:Connect(function() pcall(mainLoop) end)
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function() neighborCache = {} end)
