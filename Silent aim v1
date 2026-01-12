@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
@@ -11,21 +12,20 @@ local Mouse = LocalPlayer:GetMouse()
 
 local Constants = {
     GUI_NAME = "FOVGui",
-    GUI_SIZE = Vector2.new(280, 330), -- Increased height to fit the new button
-    GUI_POSITION = Vector2.new(20, 100),
+    GUI_SIZE = Vector2.new(320, 380),
     
     COLORS = {
-        Background = Color3.fromRGB(20, 20, 25),
-        Container = Color3.fromRGB(30, 30, 35),
-        ContainerHover = Color3.fromRGB(35, 35, 40),
-        ContainerActive = Color3.fromRGB(40, 40, 45),
-        Accent = Color3.fromRGB(255, 180, 0),
-        Input = Color3.fromRGB(45, 45, 50),
-        InputHover = Color3.fromRGB(55, 55, 60),
-        Text = Color3.fromRGB(200, 200, 200),
-        TextBright = Color3.fromRGB(255, 255, 255),
-        Active = Color3.fromRGB(0, 200, 80),
-        Inactive = Color3.fromRGB(60, 60, 65),
+        Background = Color3.fromRGB(15, 15, 20),
+        Panel = Color3.fromRGB(25, 25, 32),
+        PanelHover = Color3.fromRGB(30, 30, 38),
+        Primary = Color3.fromRGB(138, 180, 248),
+        PrimaryDim = Color3.fromRGB(88, 130, 198),
+        Success = Color3.fromRGB(102, 217, 164),
+        Danger = Color3.fromRGB(255, 107, 107),
+        Text = Color3.fromRGB(220, 220, 230),
+        TextDim = Color3.fromRGB(150, 150, 165),
+        Border = Color3.fromRGB(45, 45, 55),
+        InputBg = Color3.fromRGB(20, 20, 28),
     },
     
     LIMITS = {
@@ -39,7 +39,7 @@ local Constants = {
 --// Configuration
 local Config = {
     Enabled = true,
-    FollowMouse = true, -- New Setting
+    FollowMouse = true,
     TeamCheck = false,
     WallCheck = false,
     ShowFOV = true,
@@ -49,11 +49,11 @@ local Config = {
 }
 
 local Visual = {
-    FOVColor = Color3.fromRGB(255, 255, 255),
-    FOVThickness = 1,
-    HighlightFill = Color3.fromRGB(255, 0, 0),
-    HighlightOutline = Color3.fromRGB(255, 255, 255),
-    FillTransparency = 0.5,
+    FOVColor = Color3.fromRGB(138, 180, 248),
+    FOVThickness = 2,
+    HighlightFill = Color3.fromRGB(255, 107, 107),
+    HighlightOutline = Color3.fromRGB(138, 180, 248),
+    FillTransparency = 0.6,
     OutlineTransparency = 0,
 }
 
@@ -63,7 +63,8 @@ local State = {
     Connections = {},
     Hooks = {},
     ClickToTargetMode = false,
-    FOVRingObj = nil 
+    FOVRingObj = nil,
+    GUIVisible = true,
 }
 
 --// Cleanup
@@ -99,13 +100,20 @@ local function IsVisible(targetPart)
     return #parts == 0
 end
 
---// FOV Position Logic
+local function TweenObject(obj, props, duration)
+    local tween = TweenService:Create(obj, TweenInfo.new(duration or 0.2, Enum.EasingStyle.Quad), props)
+    tween:Play()
+    return tween
+end
+
+--// FOV Position Logic - PIXEL PERFECT CENTER
 local function GetFOVPosition()
     if Config.FollowMouse then
-        return UserInputService:GetMouseLocation()
+        local mousePos = UserInputService:GetMouseLocation()
+        return Vector2.new(math.floor(mousePos.X + 0.5), math.floor(mousePos.Y + 0.5))
     else
         local viewport = Camera.ViewportSize
-        return Vector2.new(viewport.X / 2, viewport.Y / 2)
+        return Vector2.new(math.floor(viewport.X / 2 + 0.5), math.floor(viewport.Y / 2 + 0.5))
     end
 end
 
@@ -136,7 +144,7 @@ local function GetClosestPlayerToCursor()
     
     -- Closest to FOV Center Logic
     local ClosestPlayer, ShortestDistance = nil, Config.FOVRadius
-    local OriginPos = GetFOVPosition() -- Gets either Mouse Pos or Screen Center
+    local OriginPos = GetFOVPosition()
     
     for _, Player in pairs(Players:GetPlayers()) do
         if Player ~= LocalPlayer then
@@ -224,6 +232,7 @@ function GUIBuilder.CreateScreenGui()
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = Constants.GUI_NAME
     ScreenGui.ResetOnSpawn = false
+    ScreenGui.IgnoreGuiInset = true
     ScreenGui.Parent = PlayerGui
     return ScreenGui
 end
@@ -238,6 +247,7 @@ function GUIBuilder.CreateFOVRing(parent)
     local Stroke = Instance.new("UIStroke")
     Stroke.Thickness = Visual.FOVThickness
     Stroke.Color = Visual.FOVColor
+    Stroke.Transparency = 0.3
     Stroke.Parent = FOVRing
     
     local Corner = Instance.new("UICorner")
@@ -251,44 +261,104 @@ end
 function GUIBuilder.CreateControlFrame(parent)
     local ControlFrame = Instance.new("Frame")
     ControlFrame.Size = UDim2.new(0, Constants.GUI_SIZE.X, 0, Constants.GUI_SIZE.Y)
-    ControlFrame.Position = UDim2.new(0, Constants.GUI_POSITION.X, 0, Constants.GUI_POSITION.Y)
+    ControlFrame.Position = UDim2.new(0, 30, 0, 120)
     ControlFrame.BackgroundColor3 = Constants.COLORS.Background
     ControlFrame.BorderSizePixel = 0
     ControlFrame.Parent = parent
     
     local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 4)
+    Corner.CornerRadius = UDim.new(0, 12)
     Corner.Parent = ControlFrame
     
-    local AccentBar = Instance.new("Frame")
-    AccentBar.Size = UDim2.new(1, 0, 0, 2)
-    AccentBar.BackgroundColor3 = Constants.COLORS.Accent
-    AccentBar.BorderSizePixel = 0
-    AccentBar.Parent = ControlFrame
+    local Shadow = Instance.new("ImageLabel")
+    Shadow.Name = "Shadow"
+    Shadow.Size = UDim2.new(1, 30, 1, 30)
+    Shadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    Shadow.BackgroundTransparency = 1
+    Shadow.Image = "rbxasset://textures/ui/GuiImagePlaceholder.png"
+    Shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    Shadow.ImageTransparency = 0.7
+    Shadow.ScaleType = Enum.ScaleType.Slice
+    Shadow.SliceCenter = Rect.new(10, 10, 118, 118)
+    Shadow.ZIndex = 0
+    Shadow.Parent = ControlFrame
+    
+    local TopBar = Instance.new("Frame")
+    TopBar.Size = UDim2.new(1, 0, 0, 50)
+    TopBar.BackgroundColor3 = Constants.COLORS.Panel
+    TopBar.BorderSizePixel = 0
+    TopBar.Parent = ControlFrame
+    
+    local TopCorner = Instance.new("UICorner")
+    TopCorner.CornerRadius = UDim.new(0, 12)
+    TopCorner.Parent = TopBar
+    
+    local BottomCover = Instance.new("Frame")
+    BottomCover.Size = UDim2.new(1, 0, 0, 12)
+    BottomCover.Position = UDim2.new(0, 0, 1, -12)
+    BottomCover.BackgroundColor3 = Constants.COLORS.Panel
+    BottomCover.BorderSizePixel = 0
+    BottomCover.Parent = TopBar
     
     local TitleLabel = Instance.new("TextLabel")
-    TitleLabel.Size = UDim2.new(1, -20, 0, 30)
-    TitleLabel.Position = UDim2.new(0, 10, 0, 8)
+    TitleLabel.Size = UDim2.new(1, -60, 1, 0)
+    TitleLabel.Position = UDim2.new(0, 20, 0, 0)
     TitleLabel.BackgroundTransparency = 1
-    TitleLabel.Text = "ASTA:CONFIG"
+    TitleLabel.Text = "SILENT AIM"
     TitleLabel.Font = Enum.Font.GothamBold
-    TitleLabel.TextSize = 14
-    TitleLabel.TextColor3 = Constants.COLORS.Accent
+    TitleLabel.TextSize = 16
+    TitleLabel.TextColor3 = Constants.COLORS.Text
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TitleLabel.Parent = ControlFrame
+    TitleLabel.Parent = TopBar
+    
+    local StatusDot = Instance.new("Frame")
+    StatusDot.Size = UDim2.new(0, 8, 0, 8)
+    StatusDot.Position = UDim2.new(0, 8, 0.5, -4)
+    StatusDot.BackgroundColor3 = Constants.COLORS.Success
+    StatusDot.BorderSizePixel = 0
+    StatusDot.Parent = TopBar
+    Instance.new("UICorner", StatusDot).CornerRadius = UDim.new(1, 0)
+    
+    local MinimizeBtn = Instance.new("TextButton")
+    MinimizeBtn.Size = UDim2.new(0, 30, 0, 30)
+    MinimizeBtn.Position = UDim2.new(1, -40, 0.5, -15)
+    MinimizeBtn.BackgroundColor3 = Constants.COLORS.InputBg
+    MinimizeBtn.Text = "—"
+    MinimizeBtn.Font = Enum.Font.GothamBold
+    MinimizeBtn.TextSize = 14
+    MinimizeBtn.TextColor3 = Constants.COLORS.Text
+    MinimizeBtn.Parent = TopBar
+    Instance.new("UICorner", MinimizeBtn).CornerRadius = UDim.new(0, 6)
+    
+    MinimizeBtn.MouseButton1Click:Connect(function()
+        State.GUIVisible = not State.GUIVisible
+        if State.GUIVisible then
+            ControlFrame.Size = UDim2.new(0, Constants.GUI_SIZE.X, 0, Constants.GUI_SIZE.Y)
+            MinimizeBtn.Text = "—"
+        else
+            ControlFrame.Size = UDim2.new(0, Constants.GUI_SIZE.X, 0, 50)
+            MinimizeBtn.Text = "+"
+        end
+    end)
 
     return ControlFrame
 end
 
 function GUIBuilder.CreateContentFrame(parent)
-    local ContentFrame = Instance.new("Frame")
-    ContentFrame.Size = UDim2.new(1, -20, 1, -48)
-    ContentFrame.Position = UDim2.new(0, 10, 0, 38)
+    local ContentFrame = Instance.new("ScrollingFrame")
+    ContentFrame.Size = UDim2.new(1, -30, 1, -70)
+    ContentFrame.Position = UDim2.new(0, 15, 0, 60)
     ContentFrame.BackgroundTransparency = 1
+    ContentFrame.BorderSizePixel = 0
+    ContentFrame.ScrollBarThickness = 4
+    ContentFrame.ScrollBarImageColor3 = Constants.COLORS.Primary
+    ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    ContentFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
     ContentFrame.Parent = parent
     
     local UIList = Instance.new("UIListLayout")
-    UIList.Padding = UDim.new(0, 8)
+    UIList.Padding = UDim.new(0, 10)
     UIList.HorizontalAlignment = Enum.HorizontalAlignment.Left
     UIList.SortOrder = Enum.SortOrder.LayoutOrder
     UIList.Parent = ContentFrame
@@ -324,93 +394,123 @@ end
 
 function GUIBuilder.CreateToggle(parent, name, default, callback)
     local Container = Instance.new("Frame")
-    Container.Size = UDim2.new(1, 0, 0, 28)
-    Container.BackgroundColor3 = Constants.COLORS.Container
+    Container.Size = UDim2.new(1, 0, 0, 40)
+    Container.BackgroundColor3 = Constants.COLORS.Panel
     Container.Parent = parent
-    Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 3)
+    Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 8)
+    
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -70, 1, 0)
+    Label.Position = UDim2.new(0, 15, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = name
+    Label.Font = Enum.Font.Gotham
+    Label.TextSize = 13
+    Label.TextColor3 = Constants.COLORS.Text
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.Parent = Container
     
     local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
-    ToggleBtn.BackgroundTransparency = 1
-    ToggleBtn.Font = Enum.Font.Gotham
-    ToggleBtn.TextSize = 12
-    ToggleBtn.TextColor3 = Constants.COLORS.Text
-    ToggleBtn.TextXAlignment = Enum.TextXAlignment.Left
-    ToggleBtn.Text = "   " .. name
+    ToggleBtn.Size = UDim2.new(0, 50, 0, 24)
+    ToggleBtn.Position = UDim2.new(1, -60, 0.5, -12)
+    ToggleBtn.BackgroundColor3 = default and Constants.COLORS.Success or Constants.COLORS.Border
+    ToggleBtn.Text = ""
     ToggleBtn.Parent = Container
+    Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
     
-    local StatusBox = Instance.new("Frame")
-    StatusBox.Size = UDim2.new(0, 40, 0, 18)
-    StatusBox.Position = UDim2.new(1, -50, 0.5, -9)
-    StatusBox.BackgroundColor3 = default and Constants.COLORS.Active or Constants.COLORS.Inactive
-    StatusBox.Parent = Container
-    Instance.new("UICorner", StatusBox).CornerRadius = UDim.new(0, 2)
-    
-    local StatusText = Instance.new("TextLabel")
-    StatusText.Size = UDim2.new(1, 0, 1, 0)
-    StatusText.BackgroundTransparency = 1
-    StatusText.Font = Enum.Font.GothamBold
-    StatusText.TextSize = 10
-    StatusText.TextColor3 = Constants.COLORS.TextBright
-    StatusText.Text = default and "ON" or "OFF"
-    StatusText.Parent = StatusBox
+    local Knob = Instance.new("Frame")
+    Knob.Size = UDim2.new(0, 18, 0, 18)
+    Knob.Position = default and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+    Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    Knob.Parent = ToggleBtn
+    Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
     
     ToggleBtn.MouseButton1Click:Connect(function()
         default = not default
-        StatusBox.BackgroundColor3 = default and Constants.COLORS.Active or Constants.COLORS.Inactive
-        StatusText.Text = default and "ON" or "OFF"
+        TweenObject(ToggleBtn, {BackgroundColor3 = default and Constants.COLORS.Success or Constants.COLORS.Border}, 0.2)
+        TweenObject(Knob, {Position = default and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)}, 0.2)
         callback(default)
+    end)
+    
+    Container.MouseEnter:Connect(function()
+        TweenObject(Container, {BackgroundColor3 = Constants.COLORS.PanelHover}, 0.15)
+    end)
+    
+    Container.MouseLeave:Connect(function()
+        TweenObject(Container, {BackgroundColor3 = Constants.COLORS.Panel}, 0.15)
     end)
 end
 
 function GUIBuilder.CreateTextbox(parent, name, default, callback, minVal, maxVal, isTargetBox)
     local Container = Instance.new("Frame")
-    Container.Size = UDim2.new(1, 0, 0, 28)
-    Container.BackgroundColor3 = Constants.COLORS.Container
+    Container.Size = UDim2.new(1, 0, 0, 40)
+    Container.BackgroundColor3 = Constants.COLORS.Panel
     Container.Parent = parent
-    Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 3)
+    Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 8)
     
     local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.5, 0, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.Size = UDim2.new(0, isTargetBox and 100 or 120, 1, 0)
+    Label.Position = UDim2.new(0, 15, 0, 0)
     Label.BackgroundTransparency = 1
     Label.Font = Enum.Font.Gotham
-    Label.TextSize = 12
+    Label.TextSize = 13
     Label.TextColor3 = Constants.COLORS.Text
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.Text = name
     Label.Parent = Container
     
     local InputBox = Instance.new("TextBox")
-    InputBox.Size = UDim2.new(0, isTargetBox and 80 or 60, 0, 18)
-    InputBox.Position = UDim2.new(1, isTargetBox and -90 or -70, 0.5, -9)
-    InputBox.BackgroundColor3 = Constants.COLORS.Input
-    InputBox.Font = Enum.Font.GothamBold
-    InputBox.TextSize = 11
-    InputBox.TextColor3 = Constants.COLORS.Accent
+    InputBox.Size = UDim2.new(0, isTargetBox and 90 or 70, 0, 26)
+    InputBox.Position = UDim2.new(1, isTargetBox and -100 or -80, 0.5, -13)
+    InputBox.BackgroundColor3 = Constants.COLORS.InputBg
+    InputBox.Font = Enum.Font.GothamMedium
+    InputBox.TextSize = 12
+    InputBox.TextColor3 = Constants.COLORS.Primary
     InputBox.Text = tostring(default)
     InputBox.ClearTextOnFocus = false
     InputBox.Parent = Container
-    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 2)
+    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 6)
+    
+    local InputStroke = Instance.new("UIStroke")
+    InputStroke.Color = Constants.COLORS.Border
+    InputStroke.Thickness = 1
+    InputStroke.Transparency = 0.6
+    InputStroke.Parent = InputBox
     
     if isTargetBox then
         local ClickBtn = Instance.new("TextButton")
-        ClickBtn.Size = UDim2.new(0, 40, 0, 18)
-        ClickBtn.Position = UDim2.new(1, -45, 0.5, -9) 
-        ClickBtn.BackgroundColor3 = Constants.COLORS.Accent
+        ClickBtn.Size = UDim2.new(0, 36, 0, 26)
+        ClickBtn.Position = UDim2.new(1, -60, 0.5, -13)
+        ClickBtn.BackgroundColor3 = Constants.COLORS.Primary
         ClickBtn.Text = "SEL"
         ClickBtn.Font = Enum.Font.GothamBold
-        ClickBtn.TextSize = 9
+        ClickBtn.TextSize = 10
+        ClickBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         ClickBtn.Parent = Container
-        Instance.new("UICorner", ClickBtn).CornerRadius = UDim.new(0, 2)
-        InputBox.Position = UDim2.new(1, -130, 0.5, -9) 
+        Instance.new("UICorner", ClickBtn).CornerRadius = UDim.new(0, 6)
+        
+        InputBox.Position = UDim2.new(1, -145, 0.5, -13)
+        
+        ClickBtn.MouseEnter:Connect(function()
+            TweenObject(ClickBtn, {BackgroundColor3 = Constants.COLORS.PrimaryDim}, 0.15)
+        end)
+        
+        ClickBtn.MouseLeave:Connect(function()
+            TweenObject(ClickBtn, {BackgroundColor3 = Constants.COLORS.Primary}, 0.15)
+        end)
         
         ClickBtn.MouseButton1Click:Connect(function()
             GUIBuilder.EnableClickToTarget(InputBox)
         end)
     end
 
+    InputBox.Focused:Connect(function()
+        TweenObject(InputStroke, {Transparency = 0, Color = Constants.COLORS.Primary}, 0.15)
+    end)
+    
     InputBox.FocusLost:Connect(function()
+        TweenObject(InputStroke, {Transparency = 0.6, Color = Constants.COLORS.Border}, 0.15)
+        
         if isTargetBox then
             callback(InputBox.Text)
         else
@@ -424,11 +524,18 @@ function GUIBuilder.CreateTextbox(parent, name, default, callback, minVal, maxVa
             end
         end
     end)
+    
+    Container.MouseEnter:Connect(function()
+        TweenObject(Container, {BackgroundColor3 = Constants.COLORS.PanelHover}, 0.15)
+    end)
+    
+    Container.MouseLeave:Connect(function()
+        TweenObject(Container, {BackgroundColor3 = Constants.COLORS.Panel}, 0.15)
+    end)
 end
 
 --// Hooks
 local function SetupHooks()
-    -- NOTE: These will only work in an Executor environment (Synapse, Krnl, etc.)
     if not hookmetamethod then return end
 
     local old_namecall
@@ -460,8 +567,7 @@ local function Initialize()
     
     -- Controls
     GUIBuilder.CreateToggle(ContentFrame, "Enabled", Config.Enabled, function(v) Config.Enabled = v end)
-    GUIBuilder.CreateToggle(ContentFrame, "Show FOV", Config.ShowFOV, function(v) Config.ShowFOV = v end)
-    -- NEW BUTTON HERE:
+    GUIBuilder.CreateToggle(ContentFrame, "Show FOV Circle", Config.ShowFOV, function(v) Config.ShowFOV = v end)
     GUIBuilder.CreateToggle(ContentFrame, "Follow Mouse", Config.FollowMouse, function(v) Config.FollowMouse = v end)
     GUIBuilder.CreateToggle(ContentFrame, "Team Check", Config.TeamCheck, function(v) Config.TeamCheck = v end)
     GUIBuilder.CreateToggle(ContentFrame, "Wall Check", Config.WallCheck, function(v) Config.WallCheck = v end)
@@ -470,7 +576,7 @@ local function Initialize()
         Config.FOVRadius = v 
     end, Constants.LIMITS.FOVRadiusMin, Constants.LIMITS.FOVRadiusMax, false)
     
-    GUIBuilder.CreateTextbox(ContentFrame, "Max Dist", Config.MaxDistance, function(v) 
+    GUIBuilder.CreateTextbox(ContentFrame, "Max Distance", Config.MaxDistance, function(v) 
         Config.MaxDistance = v 
     end, Constants.LIMITS.MaxDistanceMin, Constants.LIMITS.MaxDistanceMax, false)
     
@@ -480,7 +586,6 @@ local function Initialize()
     
     -- Main Loop
     local RunConnection = RunService.RenderStepped:Connect(function()
-        -- Update FOV Ring Position based on mode
         local OriginPos = GetFOVPosition()
         
         if State.FOVRingObj then
@@ -489,7 +594,6 @@ local function Initialize()
             State.FOVRingObj.Position = UDim2.new(0, OriginPos.X, 0, OriginPos.Y)
         end
         
-        -- Find Target
         if Config.Enabled then
             local target = GetClosestPlayerToCursor()
             Highlight.Update(target)
