@@ -547,8 +547,18 @@ local function SetupHooks()
             local targetPart = State.CurrentTarget.Character.Head
             if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
                 local origin = args[1]
-                args[2] = (targetPart.Position - origin).Unit * Config.MaxDistance
-                return old_namecall(self, unpack(args))
+                local direction = args[2]
+                local rayLength = direction.Magnitude
+                
+                -- Rivals uses camera-based raycasts, so check if origin is near camera
+                local distanceFromCamera = (origin - Camera.CFrame.Position).Magnitude
+                
+                -- If it's a longer raycast (likely weapon fire, not movement)
+                -- OR if it's from camera position (Rivals shooting style)
+                if rayLength > 10 or distanceFromCamera < 3 then
+                    args[2] = (targetPart.Position - origin).Unit * rayLength
+                    return old_namecall(self, unpack(args))
+                end
             end
         end
         return old_namecall(self, ...)
